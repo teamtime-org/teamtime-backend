@@ -1,0 +1,199 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+    ADMINISTRADOR
+    COORDINADOR
+    COLABORADOR
+}
+
+enum ProjectStatus {
+    ACTIVE
+    ON_HOLD
+    COMPLETED
+    CANCELLED
+}
+
+enum Priority {
+    LOW
+    MEDIUM
+    HIGH
+    URGENT
+}
+
+enum TaskStatus {
+    TODO
+    IN_PROGRESS
+    REVIEW
+    DONE
+}
+
+// Modelos
+model User {
+    id        String   @id @default(uuid())
+    email     String   @unique
+    password  String
+    firstName String   @map("first_name")
+    lastName  String   @map("last_name")
+    role      UserRole
+    areaId    String?  @map("area_id")
+    createdBy String?  @map("created_by")
+    isActive  Boolean  @default(true) @map("is_active")
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Relaciones
+    area                Area?               @relation(fields: [areaId], references: [id])
+    creator             User?               @relation("UserCreator", fields: [createdBy], references: [id])
+    createdUsers        User[]              @relation("UserCreator")
+    createdAreas        Area[]              @relation("AreaCreator")
+    createdProjects     Project[]           @relation("ProjectCreator")
+    assignedProjects    ProjectAssignment[]
+    createdTasks        Task[]              @relation("TaskCreator")
+    assignedTasks       Task[]              @relation("TaskAssignee")
+    timeEntries         TimeEntry[]
+    approvedTimeEntries TimeEntry[]         @relation("TimeEntryApprover")
+    projectAssignments  ProjectAssignment[] @relation("ProjectAssigner")
+
+    @@map("users")
+}
+
+model Area {
+    id          String   @id @default(uuid())
+    name        String   @unique
+    description String?
+    color       String   @default("#2563EB")
+    createdBy   String   @map("created_by")
+    isActive    Boolean  @default(true) @map("is_active")
+    createdAt   DateTime @default(now()) @map("created_at")
+    updatedAt   DateTime @updatedAt @map("updated_at")
+
+    // Relaciones
+    creator  User      @relation("AreaCreator", fields: [createdBy], references: [id])
+    users    User[]
+    projects Project[]
+
+    @@map("areas")
+}
+
+model Project {
+    id             String        @id @default(uuid())
+    name           String
+    description    String?
+    areaId         String        @map("area_id")
+    status         ProjectStatus @default(ACTIVE)
+    priority       Priority      @default(MEDIUM)
+    startDate      DateTime?     @map("start_date") @db.Date
+    endDate        DateTime?     @map("end_date") @db.Date
+    estimatedHours Decimal?      @map("estimated_hours") @db.Decimal(8, 2)
+    createdBy      String        @map("created_by")
+    isActive       Boolean       @default(true) @map("is_active")
+    createdAt      DateTime      @default(now()) @map("created_at")
+    updatedAt      DateTime      @updatedAt @map("updated_at")
+
+    // Relaciones
+    area        Area                @relation(fields: [areaId], references: [id])
+    creator     User                @relation("ProjectCreator", fields: [createdBy], references: [id])
+    assignments ProjectAssignment[]
+    tasks       Task[]
+    timeEntries TimeEntry[]
+
+    @@map("projects")
+}
+
+model ProjectAssignment {
+    id           String   @id @default(uuid())
+    projectId    String   @map("project_id")
+    userId       String   @map("user_id")
+    assignedById String   @map("assigned_by")
+    assignedAt   DateTime @default(now()) @map("assigned_at")
+    isActive     Boolean  @default(true) @map("is_active")
+
+    // Relaciones
+    project    Project @relation(fields: [projectId], references: [id])
+    user       User    @relation(fields: [userId], references: [id])
+    assignedBy User    @relation("ProjectAssigner", fields: [assignedById], references: [id])
+
+    // Un usuario solo puede tener una asignación activa por proyecto
+    @@unique([projectId, userId, isActive])
+    @@map("project_assignments")
+}
+
+model Task {
+    id             String     @id @default(uuid())
+    title          String
+    description    String?
+    projectId      String     @map("project_id")
+    status         TaskStatus @default(TODO)
+    priority       Priority   @default(MEDIUM)
+    assignedTo     String?    @map("assigned_to")
+    estimatedHours Decimal?   @map("estimated_hours") @db.Decimal(8, 2)
+    createdBy      String     @map("created_by")
+    dueDate        DateTime?  @map("due_date") @db.Date
+    isActive       Boolean    @default(true) @map("is_active")
+    createdAt      DateTime   @default(now()) @map("created_at")
+    updatedAt      DateTime   @updatedAt @map("updated_at")
+
+    // Relaciones
+    project     Project     @relation(fields: [projectId], references: [id])
+    assignee    User?       @relation("TaskAssignee", fields: [assignedTo], references: [id])
+    creator     User        @relation("TaskCreator", fields: [createdBy], references: [id])
+    timeEntries TimeEntry[]
+
+    @@map("tasks")
+}
+
+model TimePeriod {
+    id           String   @id @default(uuid())
+    year         Int
+    month        Int
+    periodNumber Int      @map("period_number") // 1 o 2 (primera o segunda quincena)
+    startDate    DateTime @map("start_date") @db.Date
+    endDate      DateTime @map("end_date") @db.Date
+    isActive     Boolean  @default(true) @map("is_active")
+    createdAt    DateTime @default(now()) @map("created_at")
+
+    // Relaciones
+    timeEntries TimeEntry[]
+
+    // Combinación única por período
+    @@unique([year, month, periodNumber])
+    @@map("time_periods")
+}
+
+model TimeEntry {
+    id           String    @id @default(uuid())
+    userId       String    @map("user_id")
+    projectId    String    @map("project_id")
+    taskId       String?   @map("task_id")
+    timePeriodId String    @map("time_period_id")
+    date         DateTime  @db.Date
+    hours        Decimal   @db.Decimal(4, 2)
+    description  String?
+    isApproved   Boolean   @default(false) @map("is_approved")
+    approvedBy   String?   @map("approved_by")
+    approvedAt   DateTime? @map("approved_at")
+    createdAt    DateTime  @default(now()) @map("created_at")
+    updatedAt    DateTime  @updatedAt @map("updated_at")
+
+    // Relaciones
+    user       User       @relation(fields: [userId], references: [id])
+    project    Project    @relation(fields: [projectId], references: [id])
+    task       Task?      @relation(fields: [taskId], references: [id])
+    timePeriod TimePeriod @relation(fields: [timePeriodId], references: [id])
+    approver   User?      @relation("TimeEntryApprover", fields: [approvedBy], references: [id])
+
+    // Única entrada por usuario, proyecto, tarea y fecha
+    @@unique([userId, projectId, taskId, date])
+    @@map("time_entries")
+}
