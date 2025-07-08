@@ -1,0 +1,3136 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "TeamTime API",
+    "version": "1.0.0",
+    "description": "API REST para gestión de tiempo, proyectos y recursos humanos con sistema de roles jerárquico",
+    "contact": {
+      "name": "TeamTime Development Team",
+      "email": "desarrollo@teamtime.com",
+      "url": "https://github.com/your-org/teamtime-backend"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api",
+      "description": "Servidor de desarrollo"
+    },
+    {
+      "url": "https://api.teamtime.com/api",
+      "description": "Servidor de producción"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Token JWT obtenido del endpoint /auth/login"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "message": {
+            "type": "string",
+            "example": "Descripción del error"
+          },
+          "error": {
+            "type": "string",
+            "example": "VALIDATION_ERROR"
+          },
+          "details": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "example": "email"
+              },
+              "code": {
+                "type": "string",
+                "example": "INVALID_FORMAT"
+              }
+            }
+          }
+        }
+      },
+      "Success": {
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "example": "Operación exitosa"
+          },
+          "data": {
+            "type": "object",
+            "description": "Datos de respuesta específicos del endpoint"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "firstName",
+          "lastName",
+          "role"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "user-123"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "usuario@ejemplo.com"
+          },
+          "firstName": {
+            "type": "string",
+            "example": "Juan"
+          },
+          "lastName": {
+            "type": "string",
+            "example": "Pérez"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMINISTRADOR",
+              "COORDINADOR",
+              "COLABORADOR"
+            ],
+            "example": "COLABORADOR"
+          },
+          "areaId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "area-456"
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-07-04T10:30:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-07-04T10:30:00.000Z"
+          }
+        }
+      },
+      "Area": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "area-123"
+          },
+          "name": {
+            "type": "string",
+            "example": "Desarrollo"
+          },
+          "description": {
+            "type": "string",
+            "example": "Área de desarrollo de software"
+          },
+          "isActive": {
+            "type": "boolean",
+            "example": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-07-04T10:30:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-07-04T10:30:00.000Z"
+          }
+        }
+      },
+      "Project": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "areaId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "project-123"
+          },
+          "name": {
+            "type": "string",
+            "example": "Sistema de Gestión"
+          },
+          "description": {
+            "type": "string",
+            "example": "Desarrollo del sistema de gestión empresarial"
+          },
+          "areaId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "area-456"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PLANIFICADO",
+              "EN_PROGRESO",
+              "COMPLETADO",
+              "CANCELADO"
+            ],
+            "example": "EN_PROGRESO"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "example": "2025-07-01"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date",
+            "example": "2025-12-31"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-07-04T10:30:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-07-04T10:30:00.000Z"
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "projectId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "task-123"
+          },
+          "title": {
+            "type": "string",
+            "example": "Implementar autenticación JWT"
+          },
+          "description": {
+            "type": "string",
+            "example": "Desarrollar sistema de autenticación con tokens JWT"
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "project-456"
+          },
+          "assignedUserId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "user-789"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDIENTE",
+              "EN_PROGRESO",
+              "COMPLETADA",
+              "CANCELADA"
+            ],
+            "example": "EN_PROGRESO"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "BAJA",
+              "MEDIA",
+              "ALTA",
+              "URGENTE"
+            ],
+            "example": "ALTA"
+          },
+          "estimatedHours": {
+            "type": "number",
+            "format": "float",
+            "example": 8.5
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date",
+            "example": "2025-07-10"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-07-04T10:30:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-07-04T10:30:00.000Z"
+          }
+        }
+      },
+      "TimeEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "taskId",
+          "userId",
+          "date",
+          "hours"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "entry-123"
+          },
+          "taskId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "task-456"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "user-789"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "example": "2025-07-04"
+          },
+          "hours": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0.1,
+            "maximum": 24,
+            "example": 4.5
+          },
+          "description": {
+            "type": "string",
+            "example": "Desarrollo de funcionalidad X"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-07-04T10:30:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-07-04T10:30:00.000Z"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "usuario@ejemplo.com"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "example": "contraseña123"
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "example": "Autenticación exitosa"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/User"
+              },
+              "token": {
+                "type": "string",
+                "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              }
+            }
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "firstName",
+          "lastName"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "nuevo@ejemplo.com"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "pattern": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)",
+            "example": "ContraseñaSegura123"
+          },
+          "firstName": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 50,
+            "example": "María"
+          },
+          "lastName": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 50,
+            "example": "García"
+          },
+          "areaId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "area-123"
+          }
+        }
+      }
+    },
+    "responses": {
+      "UnauthorizedError": {
+        "description": "Token de autenticación inválido o faltante",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "message": "Token de autenticación requerido",
+              "error": "UNAUTHORIZED"
+            }
+          }
+        }
+      },
+      "ForbiddenError": {
+        "description": "Permisos insuficientes para realizar la operación",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "message": "No tienes permisos para realizar esta acción",
+              "error": "FORBIDDEN"
+            }
+          }
+        }
+      },
+      "NotFoundError": {
+        "description": "Recurso no encontrado",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "message": "Recurso no encontrado",
+              "error": "NOT_FOUND"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Error de validación en los datos enviados",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "message": "Error de validación",
+              "error": "VALIDATION_ERROR",
+              "details": {
+                "field": "email",
+                "code": "INVALID_FORMAT"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Autenticación",
+      "description": "Endpoints de autenticación y gestión de sesiones"
+    },
+    {
+      "name": "Usuarios",
+      "description": "Gestión de usuarios del sistema"
+    },
+    {
+      "name": "Áreas",
+      "description": "Gestión de áreas organizacionales"
+    },
+    {
+      "name": "Proyectos",
+      "description": "Gestión de proyectos por área"
+    },
+    {
+      "name": "Tareas",
+      "description": "Gestión de tareas de proyectos"
+    },
+    {
+      "name": "Registros de Tiempo",
+      "description": "Gestión de registros de tiempo trabajado"
+    },
+    {
+      "name": "Sistema",
+      "description": "Endpoints de utilidades y salud del sistema"
+    }
+  ],
+  "paths": {
+    "/areas": {
+      "post": {
+        "summary": "Crear nueva área",
+        "description": "Permite a los administradores crear una nueva área organizacional en el sistema.",
+        "tags": [
+          "Áreas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Marketing Digital"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Área encargada de estrategias de marketing y publicidad digital"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Área creada exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Área creada exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Area"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      },
+      "get": {
+        "summary": "Obtener lista de áreas",
+        "description": "Retorna una lista paginada de áreas con filtros opcionales.",
+        "tags": [
+          "Áreas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Número de página"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "description": "Cantidad de elementos por página"
+          },
+          {
+            "in": "query",
+            "name": "isActive",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Filtrar por estado activo/inactivo"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Buscar por nombre o descripción"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de áreas obtenida exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Áreas obtenidas exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "areas": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Area"
+                          }
+                        },
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "example": 1
+                            },
+                            "limit": {
+                              "type": "integer",
+                              "example": 10
+                            },
+                            "total": {
+                              "type": "integer",
+                              "example": 15
+                            },
+                            "pages": {
+                              "type": "integer",
+                              "example": 2
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/areas/stats": {
+      "get": {
+        "summary": "Obtener estadísticas generales de áreas",
+        "description": "Retorna estadísticas globales sobre las áreas del sistema. Solo disponible para administradores.",
+        "tags": [
+          "Áreas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estadísticas obtenidas exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Estadísticas obtenidas exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "totalAreas": {
+                          "type": "integer",
+                          "example": 8
+                        },
+                        "activeAreas": {
+                          "type": "integer",
+                          "example": 7
+                        },
+                        "inactiveAreas": {
+                          "type": "integer",
+                          "example": 1
+                        },
+                        "usersByArea": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "areaName": {
+                                "type": "string",
+                                "example": "Desarrollo"
+                              },
+                              "userCount": {
+                                "type": "integer",
+                                "example": 15
+                              }
+                            }
+                          }
+                        },
+                        "projectsByArea": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "areaName": {
+                                "type": "string",
+                                "example": "Marketing"
+                              },
+                              "projectCount": {
+                                "type": "integer",
+                                "example": 8
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      }
+    },
+    "/areas/{id}": {
+      "get": {
+        "summary": "Obtener área por ID",
+        "description": "Retorna la información detallada de un área específica.",
+        "tags": [
+          "Áreas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "ID del área"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Área obtenida exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Área obtenida exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Area"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      },
+      "put": {
+        "summary": "Actualizar área",
+        "description": "Permite a los administradores actualizar la información de un área existente.",
+        "tags": [
+          "Áreas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "ID del área"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Marketing Digital Actualizado"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Nueva descripción del área"
+                  },
+                  "isActive": {
+                    "type": "boolean",
+                    "example": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Área actualizada exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Área actualizada exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Area"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Eliminar área",
+        "description": "Realiza un soft delete del área (marcado como inactivo). Solo disponible para administradores.",
+        "tags": [
+          "Áreas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "ID del área"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Área eliminada exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Área eliminada exitosamente"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/areas/{id}/users": {
+      "get": {
+        "summary": "Obtener usuarios de un área",
+        "description": "Retorna la lista de usuarios pertenecientes a un área específica.",
+        "tags": [
+          "Áreas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "ID del área"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Número de página"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "description": "Cantidad de elementos por página"
+          },
+          {
+            "in": "query",
+            "name": "isActive",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Filtrar por usuarios activos/inactivos"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usuarios del área obtenidos exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Usuarios del área obtenidos exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "users": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/User"
+                          }
+                        },
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "example": 1
+                            },
+                            "limit": {
+                              "type": "integer",
+                              "example": 10
+                            },
+                            "total": {
+                              "type": "integer",
+                              "example": 25
+                            },
+                            "pages": {
+                              "type": "integer",
+                              "example": 3
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/areas/{id}/projects": {
+      "get": {
+        "summary": "Obtener proyectos de un área",
+        "description": "Retorna la lista de proyectos pertenecientes a un área específica.",
+        "tags": [
+          "Áreas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "ID del área"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Número de página"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "description": "Cantidad de elementos por página"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PLANIFICADO",
+                "EN_PROGRESO",
+                "COMPLETADO",
+                "CANCELADO"
+              ]
+            },
+            "description": "Filtrar por estado del proyecto"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proyectos del área obtenidos exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Proyectos del área obtenidos exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "projects": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Project"
+                          }
+                        },
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "example": 1
+                            },
+                            "limit": {
+                              "type": "integer",
+                              "example": 10
+                            },
+                            "total": {
+                              "type": "integer",
+                              "example": 15
+                            },
+                            "pages": {
+                              "type": "integer",
+                              "example": 2
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/areas/{id}/stats": {
+      "get": {
+        "summary": "Obtener estadísticas de un área",
+        "description": "Retorna estadísticas específicas de un área. Disponible para administradores y coordinadores del área.",
+        "tags": [
+          "Áreas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "ID del área"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha de inicio del período para estadísticas"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha de fin del período para estadísticas"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estadísticas del área obtenidas exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Estadísticas del área obtenidas exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "areaInfo": {
+                          "$ref": "#/components/schemas/Area"
+                        },
+                        "totalUsers": {
+                          "type": "integer",
+                          "example": 15
+                        },
+                        "activeProjects": {
+                          "type": "integer",
+                          "example": 8
+                        },
+                        "completedProjects": {
+                          "type": "integer",
+                          "example": 12
+                        },
+                        "totalHoursWorked": {
+                          "type": "number",
+                          "format": "float",
+                          "example": 1250.5
+                        },
+                        "averageHoursPerUser": {
+                          "type": "number",
+                          "format": "float",
+                          "example": 83.4
+                        },
+                        "tasksByStatus": {
+                          "type": "object",
+                          "properties": {
+                            "PENDIENTE": {
+                              "type": "integer",
+                              "example": 25
+                            },
+                            "EN_PROGRESO": {
+                              "type": "integer",
+                              "example": 18
+                            },
+                            "COMPLETADA": {
+                              "type": "integer",
+                              "example": 45
+                            },
+                            "CANCELADA": {
+                              "type": "integer",
+                              "example": 2
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "summary": "Registrar nuevo usuario",
+        "description": "Crea un nuevo usuario en el sistema. Solo los administradores pueden especificar el área.",
+        "tags": [
+          "Autenticación"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Usuario registrado exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Usuario registrado exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "user": {
+                          "$ref": "#/components/schemas/User"
+                        },
+                        "token": {
+                          "type": "string",
+                          "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "409": {
+            "description": "Email ya registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Iniciar sesión",
+        "description": "Autentica un usuario y devuelve un token JWT para acceder a endpoints protegidos.",
+        "tags": [
+          "Autenticación"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Autenticación exitosa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "description": "Credenciales inválidas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/profile": {
+      "get": {
+        "summary": "Obtener perfil del usuario autenticado",
+        "description": "Retorna la información del perfil del usuario que está autenticado actualmente.",
+        "tags": [
+          "Autenticación"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Perfil obtenido exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Perfil obtenido exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      },
+      "put": {
+        "summary": "Actualizar perfil del usuario autenticado",
+        "description": "Permite al usuario autenticado actualizar su información de perfil.",
+        "tags": [
+          "Autenticación"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "firstName": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 50,
+                    "example": "Juan Carlos"
+                  },
+                  "lastName": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 50,
+                    "example": "Pérez López"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "nuevo.email@ejemplo.com"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Perfil actualizado exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Perfil actualizado exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/auth/change-password": {
+      "post": {
+        "summary": "Cambiar contraseña",
+        "description": "Permite al usuario autenticado cambiar su contraseña actual.",
+        "tags": [
+          "Autenticación"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "currentPassword",
+                  "newPassword"
+                ],
+                "properties": {
+                  "currentPassword": {
+                    "type": "string",
+                    "example": "contraseñaActual123"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "minLength": 8,
+                    "pattern": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)",
+                    "example": "NuevaContraseña456"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contraseña cambiada exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Contraseña cambiada exitosamente"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Cerrar sesión",
+        "description": "Invalida el token JWT del usuario autenticado (implementación del lado del cliente).",
+        "tags": [
+          "Autenticación"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sesión cerrada exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Sesión cerrada exitosamente"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check del sistema",
+        "description": "Verifica el estado de salud del servicio API.",
+        "tags": [
+          "Sistema"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Servicio funcionando correctamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "OK"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2025-07-04T10:30:00.000Z"
+                    },
+                    "service": {
+                      "type": "string",
+                      "example": "TeamTime API"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects": {
+      "post": {
+        "summary": "Crear nuevo proyecto",
+        "description": "Permite a administradores y coordinadores crear un nuevo proyecto en el sistema.",
+        "tags": [
+          "Proyectos"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "areaId"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Sistema de Gestión CRM"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Desarrollo de sistema CRM para gestión de clientes"
+                  },
+                  "areaId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "area-123"
+                  },
+                  "startDate": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2025-07-01"
+                  },
+                  "endDate": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2025-12-31"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "PLANIFICADO",
+                      "EN_PROGRESO",
+                      "COMPLETADO",
+                      "CANCELADO"
+                    ],
+                    "default": "PLANIFICADO",
+                    "example": "PLANIFICADO"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Proyecto creado exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Proyecto creado exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Project"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      },
+      "get": {
+        "summary": "Obtener lista de proyectos",
+        "description": "Retorna una lista paginada de proyectos con filtros opcionales. Los usuarios ven proyectos según sus permisos.",
+        "tags": [
+          "Proyectos"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Número de página"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "description": "Cantidad de elementos por página"
+          },
+          {
+            "in": "query",
+            "name": "areaId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filtrar por área"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PLANIFICADO",
+                "EN_PROGRESO",
+                "COMPLETADO",
+                "CANCELADO"
+              ]
+            },
+            "description": "Filtrar por estado del proyecto"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Buscar por nombre o descripción"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de proyectos obtenida exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Proyectos obtenidos exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "projects": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Project"
+                          }
+                        },
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "example": 1
+                            },
+                            "limit": {
+                              "type": "integer",
+                              "example": 10
+                            },
+                            "total": {
+                              "type": "integer",
+                              "example": 45
+                            },
+                            "pages": {
+                              "type": "integer",
+                              "example": 5
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/projects/{id}": {
+      "get": {
+        "summary": "Obtener proyecto por ID",
+        "description": "Retorna la información detallada de un proyecto específico.",
+        "tags": [
+          "Proyectos"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "ID del proyecto"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proyecto obtenido exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Proyecto obtenido exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Project"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/tasks": {
+      "post": {
+        "summary": "Crear nueva tarea",
+        "description": "Permite a administradores y coordinadores crear una nueva tarea en un proyecto.",
+        "tags": [
+          "Tareas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "projectId"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "example": "Implementar autenticación JWT"
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Desarrollar sistema de autenticación con tokens JWT"
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "project-123"
+                  },
+                  "assignedUserId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "user-456"
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": [
+                      "BAJA",
+                      "MEDIA",
+                      "ALTA",
+                      "URGENTE"
+                    ],
+                    "default": "MEDIA",
+                    "example": "ALTA"
+                  },
+                  "estimatedHours": {
+                    "type": "number",
+                    "format": "float",
+                    "minimum": 0.1,
+                    "example": 8.5
+                  },
+                  "dueDate": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2025-07-15"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "PENDIENTE",
+                      "EN_PROGRESO",
+                      "COMPLETADA",
+                      "CANCELADA"
+                    ],
+                    "default": "PENDIENTE",
+                    "example": "PENDIENTE"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tarea creada exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Tarea creada exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Task"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      },
+      "get": {
+        "summary": "Obtener lista de tareas",
+        "description": "Retorna una lista paginada de tareas con filtros opcionales. Los usuarios ven tareas según sus permisos.",
+        "tags": [
+          "Tareas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Número de página"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "description": "Cantidad de elementos por página"
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filtrar por proyecto"
+          },
+          {
+            "in": "query",
+            "name": "assignedUserId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filtrar por usuario asignado"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDIENTE",
+                "EN_PROGRESO",
+                "COMPLETADA",
+                "CANCELADA"
+              ]
+            },
+            "description": "Filtrar por estado de la tarea"
+          },
+          {
+            "in": "query",
+            "name": "priority",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BAJA",
+                "MEDIA",
+                "ALTA",
+                "URGENTE"
+              ]
+            },
+            "description": "Filtrar por prioridad"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Buscar por título o descripción"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de tareas obtenida exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Tareas obtenidas exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "tasks": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Task"
+                          }
+                        },
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "example": 1
+                            },
+                            "limit": {
+                              "type": "integer",
+                              "example": 10
+                            },
+                            "total": {
+                              "type": "integer",
+                              "example": 85
+                            },
+                            "pages": {
+                              "type": "integer",
+                              "example": 9
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/tasks/{id}": {
+      "get": {
+        "summary": "Obtener tarea por ID",
+        "description": "Retorna la información detallada de una tarea específica.",
+        "tags": [
+          "Tareas"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "ID de la tarea"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tarea obtenida exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Tarea obtenida exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Task"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/time-entries": {
+      "post": {
+        "summary": "Crear registro de tiempo",
+        "description": "Permite crear un nuevo registro de tiempo trabajado en una tarea específica.",
+        "tags": [
+          "Registros de Tiempo"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "taskId",
+                  "date",
+                  "hours"
+                ],
+                "properties": {
+                  "taskId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "task-123"
+                  },
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Si no se especifica, se usa el usuario autenticado",
+                    "example": "user-456"
+                  },
+                  "date": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2025-07-04"
+                  },
+                  "hours": {
+                    "type": "number",
+                    "format": "float",
+                    "minimum": 0.1,
+                    "maximum": 24,
+                    "example": 4.5
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "example": "Desarrollo de funcionalidad X"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registro de tiempo creado exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Registro de tiempo creado exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TimeEntry"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      },
+      "get": {
+        "summary": "Obtener registros de tiempo",
+        "description": "Retorna una lista paginada de registros de tiempo con filtros opcionales. Los usuarios ven solo sus registros, coordinadores ven los de su área.",
+        "tags": [
+          "Registros de Tiempo"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Número de página"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "description": "Cantidad de elementos por página"
+          },
+          {
+            "in": "query",
+            "name": "userId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filtrar por usuario"
+          },
+          {
+            "in": "query",
+            "name": "taskId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filtrar por tarea"
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filtrar por proyecto"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha de inicio del rango"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha de fin del rango"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Registros de tiempo obtenidos exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Registros de tiempo obtenidos exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "timeEntries": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/TimeEntry"
+                          }
+                        },
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "example": 1
+                            },
+                            "limit": {
+                              "type": "integer",
+                              "example": 10
+                            },
+                            "total": {
+                              "type": "integer",
+                              "example": 45
+                            },
+                            "pages": {
+                              "type": "integer",
+                              "example": 5
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/time-entries/stats": {
+      "get": {
+        "summary": "Obtener estadísticas de tiempo",
+        "description": "Retorna estadísticas de tiempo trabajado basadas en los permisos del usuario.",
+        "tags": [
+          "Registros de Tiempo"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha de inicio del período"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha de fin del período"
+          },
+          {
+            "in": "query",
+            "name": "userId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filtrar por usuario específico"
+          },
+          {
+            "in": "query",
+            "name": "projectId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filtrar por proyecto específico"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estadísticas obtenidas exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Estadísticas obtenidas exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "totalHours": {
+                          "type": "number",
+                          "format": "float",
+                          "example": 156.5
+                        },
+                        "totalEntries": {
+                          "type": "integer",
+                          "example": 45
+                        },
+                        "averageHoursPerDay": {
+                          "type": "number",
+                          "format": "float",
+                          "example": 7.8
+                        },
+                        "hoursByProject": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "projectName": {
+                                "type": "string",
+                                "example": "Sistema de Gestión"
+                              },
+                              "hours": {
+                                "type": "number",
+                                "format": "float",
+                                "example": 48.5
+                              }
+                            }
+                          }
+                        },
+                        "hoursByUser": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "userName": {
+                                "type": "string",
+                                "example": "Juan Pérez"
+                              },
+                              "hours": {
+                                "type": "number",
+                                "format": "float",
+                                "example": 32
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          }
+        }
+      }
+    },
+    "/time-entries/user/{userId}/date/{date}": {
+      "get": {
+        "summary": "Obtener registros por usuario y fecha",
+        "description": "Retorna todos los registros de tiempo de un usuario específico en una fecha determinada.",
+        "tags": [
+          "Registros de Tiempo"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "ID del usuario"
+          },
+          {
+            "in": "path",
+            "name": "date",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Fecha en formato YYYY-MM-DD"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Registros obtenidos exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Registros obtenidos exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "timeEntries": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/TimeEntry"
+                          }
+                        },
+                        "totalHours": {
+                          "type": "number",
+                          "format": "float",
+                          "example": 8.5
+                        },
+                        "date": {
+                          "type": "string",
+                          "format": "date",
+                          "example": "2025-07-04"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundError"
+          }
+        }
+      }
+    },
+    "/users": {
+      "post": {
+        "summary": "Crear nuevo usuario",
+        "description": "Permite a administradores y coordinadores crear nuevos usuarios en el sistema.",
+        "tags": [
+          "Usuarios"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password",
+                  "firstName",
+                  "lastName",
+                  "role",
+                  "areaId"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "nuevo.usuario@ejemplo.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "example": "ContraseñaSegura123"
+                  },
+                  "firstName": {
+                    "type": "string",
+                    "example": "Carlos"
+                  },
+                  "lastName": {
+                    "type": "string",
+                    "example": "Rodríguez"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "ADMINISTRADOR",
+                      "COORDINADOR",
+                      "COLABORADOR"
+                    ],
+                    "example": "COLABORADOR"
+                  },
+                  "areaId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "area-123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Usuario creado exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Usuario creado exitosamente"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      },
+      "get": {
+        "summary": "Obtener lista de usuarios",
+        "description": "Retorna una lista paginada de usuarios con filtros opcionales. Los coordinadores solo ven usuarios de su área.",
+        "tags": [
+          "Usuarios"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Número de página"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "description": "Cantidad de elementos por página"
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ADMINISTRADOR",
+                "COORDINADOR",
+                "COLABORADOR"
+              ]
+            },
+            "description": "Filtrar por rol"
+          },
+          {
+            "in": "query",
+            "name": "areaId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filtrar por área"
+          },
+          {
+            "in": "query",
+            "name": "isActive",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Filtrar por estado activo/inactivo"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Buscar por nombre o email"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de usuarios obtenida exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Usuarios obtenidos exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "users": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/User"
+                          }
+                        },
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "example": 1
+                            },
+                            "limit": {
+                              "type": "integer",
+                              "example": 10
+                            },
+                            "total": {
+                              "type": "integer",
+                              "example": 25
+                            },
+                            "pages": {
+                              "type": "integer",
+                              "example": 3
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      }
+    },
+    "/users/stats": {
+      "get": {
+        "summary": "Obtener estadísticas de usuarios",
+        "description": "Retorna estadísticas generales sobre los usuarios del sistema. Solo disponible para administradores.",
+        "tags": [
+          "Usuarios"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estadísticas obtenidas exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Estadísticas obtenidas exitosamente"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "totalUsers": {
+                          "type": "integer",
+                          "example": 150
+                        },
+                        "activeUsers": {
+                          "type": "integer",
+                          "example": 142
+                        },
+                        "inactiveUsers": {
+                          "type": "integer",
+                          "example": 8
+                        },
+                        "usersByRole": {
+                          "type": "object",
+                          "properties": {
+                            "ADMINISTRADOR": {
+                              "type": "integer",
+                              "example": 3
+                            },
+                            "COORDINADOR": {
+                              "type": "integer",
+                              "example": 15
+                            },
+                            "COLABORADOR": {
+                              "type": "integer",
+                              "example": 132
+                            }
+                          }
+                        },
+                        "usersByArea": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "areaName": {
+                                "type": "string",
+                                "example": "Desarrollo"
+                              },
+                              "userCount": {
+                                "type": "integer",
+                                "example": 25
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ForbiddenError"
+          }
+        }
+      }
+    }
+  }
+}

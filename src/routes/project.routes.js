@@ -13,9 +13,69 @@ const {
 const router = express.Router();
 
 /**
- * @route   POST /api/projects
- * @desc    Crear nuevo proyecto
- * @access  Private (Administrador/Coordinador)
+ * @swagger
+ * /projects:
+ *   post:
+ *     summary: Crear nuevo proyecto
+ *     description: Permite a administradores y coordinadores crear un nuevo proyecto en el sistema.
+ *     tags: [Proyectos]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - areaId
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: "Sistema de Gestión CRM"
+ *               description:
+ *                 type: string
+ *                 example: "Desarrollo de sistema CRM para gestión de clientes"
+ *               areaId:
+ *                 type: string
+ *                 format: uuid
+ *                 example: "area-123"
+ *               startDate:
+ *                 type: string
+ *                 format: date
+ *                 example: "2025-07-01"
+ *               endDate:
+ *                 type: string
+ *                 format: date
+ *                 example: "2025-12-31"
+ *               status:
+ *                 type: string
+ *                 enum: [PLANIFICADO, EN_PROGRESO, COMPLETADO, CANCELADO]
+ *                 default: PLANIFICADO
+ *                 example: "PLANIFICADO"
+ *     responses:
+ *       201:
+ *         description: Proyecto creado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Proyecto creado exitosamente"
+ *                 data:
+ *                   $ref: '#/components/schemas/Project'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
  */
 router.post('/',
     authenticateToken,
@@ -25,9 +85,85 @@ router.post('/',
 );
 
 /**
- * @route   GET /api/projects
- * @desc    Obtener todos los proyectos con filtros y paginación
- * @access  Private
+ * @swagger
+ * /projects:
+ *   get:
+ *     summary: Obtener lista de proyectos
+ *     description: Retorna una lista paginada de proyectos con filtros opcionales. Los usuarios ven proyectos según sus permisos.
+ *     tags: [Proyectos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Número de página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 10
+ *         description: Cantidad de elementos por página
+ *       - in: query
+ *         name: areaId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por área
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PLANIFICADO, EN_PROGRESO, COMPLETADO, CANCELADO]
+ *         description: Filtrar por estado del proyecto
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Buscar por nombre o descripción
+ *     responses:
+ *       200:
+ *         description: Lista de proyectos obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Proyectos obtenidos exitosamente"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     projects:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Project'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         page:
+ *                           type: integer
+ *                           example: 1
+ *                         limit:
+ *                           type: integer
+ *                           example: 10
+ *                         total:
+ *                           type: integer
+ *                           example: 45
+ *                         pages:
+ *                           type: integer
+ *                           example: 5
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get('/',
     authenticateToken,
@@ -35,9 +171,44 @@ router.get('/',
 );
 
 /**
- * @route   GET /api/projects/:id
- * @desc    Obtener proyecto por ID
- * @access  Private
+ * @swagger
+ * /projects/{id}:
+ *   get:
+ *     summary: Obtener proyecto por ID
+ *     description: Retorna la información detallada de un proyecto específico.
+ *     tags: [Proyectos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID del proyecto
+ *     responses:
+ *       200:
+ *         description: Proyecto obtenido exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Proyecto obtenido exitosamente"
+ *                 data:
+ *                   $ref: '#/components/schemas/Project'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
  */
 router.get('/:id',
     authenticateToken,

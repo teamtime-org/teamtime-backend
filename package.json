@@ -18,7 +18,10 @@
         "lint": "eslint src/",
         "lint:fix": "eslint src/ --fix",
         "format": "prettier --write src/",
-        "build": "echo 'No build step required for Node.js'"
+        "build": "echo 'No build step required for Node.js'",
+        "docs:generate": "node src/scripts/generate-docs.js",
+        "docs:serve": "echo 'Swagger UI disponible en: http://localhost:3000/api/docs'",
+        "docs:open": "open http://localhost:3000/api/docs || start http://localhost:3000/api/docs || xdg-open http://localhost:3000/api/docs"
     },
     "keywords": [
         "teamtime",
@@ -42,8 +45,11 @@
         "joi": "^17.11.0",
         "jsonwebtoken": "^9.0.2",
         "morgan": "^1.10.0",
+        "swagger-jsdoc": "^6.2.8",
+        "swagger-ui-express": "^5.0.1",
         "uuid": "^9.0.1",
-        "winston": "^3.11.0"
+        "winston": "^3.11.0",
+        "yamljs": "^0.3.0"
     },
     "devDependencies": {
         "@jest/globals": "^30.0.4",

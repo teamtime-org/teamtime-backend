@@ -14,6 +14,7 @@ TeamTime Backend es una API REST robusta desarrollada en Node.js para la gestió
 - 🗄️ **ORM Prisma** para acceso type-safe a PostgreSQL
 - 📋 **Logging estructurado** con Winston
 - 🔄 **Middleware personalizado** para autenticación y manejo de errores
+- 📚 **Documentación interactiva** con Swagger/OpenAPI
 
 ## Especificación Técnica
 
@@ -28,6 +29,7 @@ TeamTime Backend es una API REST robusta desarrollada en Node.js para la gestió
 - **Testing:** Jest + Supertest
 - **Logging:** Winston
 - **Hash de contraseñas:** bcrypt
+- **Documentación:** Swagger/OpenAPI 3.0
 
 ### Arquitectura del Sistema
 
@@ -151,6 +153,9 @@ npm run type-check  # Verificar tipos (si usando TypeScript)
 npm run logs        # Ver logs de la aplicación
 npm run clean       # Limpiar archivos temporales y cache
 npm run build       # Construir para producción (si aplica)
+npm run docs:generate  # Generar documentación OpenAPI
+npm run docs:serve     # Mostrar URL de documentación
+npm run docs:open      # Abrir documentación en navegador
 ```
 
 ## Configuración de Base de Datos
@@ -310,6 +315,62 @@ const canUserAccessProject = (user, project) => {
 ```
 
 ## API Documentation
+
+### Documentación Interactiva (Swagger UI)
+
+El proyecto incluye **documentación interactiva completa** con Swagger/OpenAPI 3.0:
+
+- **📚 Swagger UI**: http://localhost:3000/api/docs
+- **📄 OpenAPI JSON**: http://localhost:3000/api/docs.json
+- **📋 OpenAPI YAML**: Disponible en `/src/docs/openapi.yaml`
+
+#### **Características de la Documentación:**
+- ✅ **Documentación completa** de todos los endpoints (14 endpoints documentados)
+- ✅ **Esquemas de datos** detallados con ejemplos (10 esquemas definidos)
+- ✅ **Autenticación JWT** integrada en la interfaz
+- ✅ **Pruebas en vivo** ("Try it out") desde la interfaz
+- ✅ **Códigos de respuesta** y ejemplos de error
+- ✅ **Filtros por módulos** (7 categorías: Autenticación, Usuarios, Proyectos, etc.)
+- ✅ **Validación de permisos** por rol documentada
+- ✅ **Generación automática** de documentación
+
+#### **Cómo usar la Documentación:**
+1. **Abrir Swagger UI**: http://localhost:3000/api/docs
+2. **Explorar endpoints** por categorías (tags)
+3. **Para endpoints protegidos**:
+   - Hacer login en `POST /auth/login`
+   - Copiar el token de la respuesta
+   - Hacer clic en "Authorize" (🔒) y pegar: `Bearer <token>`
+   - Probar cualquier endpoint protegido
+4. **Probar endpoints** usando "Try it out"
+
+#### **Scripts de Documentación:**
+```bash
+npm run docs:generate    # Generar archivos de documentación
+npm run docs:serve       # Mostrar URL de Swagger UI  
+npm run docs:open        # Abrir Swagger UI en el navegador
+```
+
+### Base URL de la API
+```
+Desarrollo: http://localhost:3000/api
+Producción: https://your-domain.com/api
+```
+- ✅ **Pruebas en vivo** desde la interfaz web
+- ✅ **Filtros y parámetros** documentados
+- ✅ **Códigos de error** con descripciones detalladas
+
+#### Generar Documentación
+```bash
+# Generar archivos de documentación
+npm run docs:generate
+
+# Ver URL de documentación
+npm run docs:serve
+
+# Abrir documentación en navegador
+npm run docs:open
+```
 
 ### Base URL
 ```
@@ -764,7 +825,7 @@ LOG_LEVEL=debug npm run dev
 - [ ] **Docker containers** para deployment
 
 ### Mejoras de UX/DX
-- [ ] **Swagger/OpenAPI** documentation
+- [x] **Swagger/OpenAPI** documentation
 - [ ] **Postman collections** automáticas
 - [ ] **SDK cliente** para JavaScript/Python
 - [ ] **Webhooks** para integraciones
@@ -774,7 +835,9 @@ LOG_LEVEL=debug npm run dev
 
 ### Documentación Técnica
 - [TESTING_SUMMARY.md](./TESTING_SUMMARY.md) - Documentación completa de tests
-- [API_DOCS.md](./docs/API_DOCS.md) - Documentación detallada de API
+- [API_DOCS.md](./src/docs/API_DOCS.md) - Documentación detallada de API
+- [OpenAPI Specification](./src/docs/openapi.yaml) - Especificación OpenAPI completa
+- [Roles y Permisos](./src/swagger-docs/roles-permissions.md) - Sistema de autorización
 - [DEPLOYMENT.md](./docs/DEPLOYMENT.md) - Guía de despliegue
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Guía de contribución
 
@@ -804,6 +867,7 @@ Este proyecto está licenciado bajo la [MIT License](./LICENSE).
 - ✅ **Documentación completa** de API y arquitectura
 - ✅ **Base de datos** PostgreSQL con Prisma ORM
 - ✅ **Middleware de seguridad** y validación
+- ✅ **Documentación interactiva** Swagger/OpenAPI 3.0
 
 ---
 

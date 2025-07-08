@@ -10,6 +10,7 @@ const config = require('./config');
 const routes = require('./routes');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const logger = require('./utils/logger');
+const { specs, swaggerUi, swaggerUiOptions } = require('./config/swagger');
 
 /**
  * Crear aplicación Express
@@ -82,6 +83,19 @@ if (config.NODE_ENV === 'production') {
 }
 
 /**
+ * Configuración de Swagger UI para documentación de API
+ */
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(specs, swaggerUiOptions));
+
+/**
+ * Endpoint para obtener especificación OpenAPI en formato JSON
+ */
+app.get('/api/docs.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(specs);
+});
+
+/**
  * Rutas de la aplicación
  */
 app.use('/api', routes);
@@ -139,11 +153,9 @@ const startServer = async () => {
             logger.info(`🚀 Servidor iniciado en puerto ${PORT}`);
             logger.info(`📝 Ambiente: ${config.NODE_ENV}`);
             logger.info(`🔗 API disponible en: http://localhost:${PORT}/api`);
+            logger.info(`� Documentación Swagger: http://localhost:${PORT}/api/docs`);
+            logger.info(`� OpenAPI JSON: http://localhost:${PORT}/api/docs.json`);
             logger.info(`💾 Base de datos: PostgreSQL`);
-
-            if (config.NODE_ENV === 'development') {
-                logger.info(`📚 Documentación: http://localhost:${PORT}/api/docs`);
-            }
         });
     } catch (error) {
         logger.error('Error al iniciar el servidor:', error);

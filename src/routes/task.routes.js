@@ -13,9 +13,79 @@ const {
 const router = express.Router();
 
 /**
- * @route   POST /api/tasks
- * @desc    Crear nueva tarea
- * @access  Private (Administrador/Coordinador)
+ * @swagger
+ * /tasks:
+ *   post:
+ *     summary: Crear nueva tarea
+ *     description: Permite a administradores y coordinadores crear una nueva tarea en un proyecto.
+ *     tags: [Tareas]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - projectId
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 example: "Implementar autenticación JWT"
+ *               description:
+ *                 type: string
+ *                 example: "Desarrollar sistema de autenticación con tokens JWT"
+ *               projectId:
+ *                 type: string
+ *                 format: uuid
+ *                 example: "project-123"
+ *               assignedUserId:
+ *                 type: string
+ *                 format: uuid
+ *                 example: "user-456"
+ *               priority:
+ *                 type: string
+ *                 enum: [BAJA, MEDIA, ALTA, URGENTE]
+ *                 default: MEDIA
+ *                 example: "ALTA"
+ *               estimatedHours:
+ *                 type: number
+ *                 format: float
+ *                 minimum: 0.1
+ *                 example: 8.5
+ *               dueDate:
+ *                 type: string
+ *                 format: date
+ *                 example: "2025-07-15"
+ *               status:
+ *                 type: string
+ *                 enum: [PENDIENTE, EN_PROGRESO, COMPLETADA, CANCELADA]
+ *                 default: PENDIENTE
+ *                 example: "PENDIENTE"
+ *     responses:
+ *       201:
+ *         description: Tarea creada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Tarea creada exitosamente"
+ *                 data:
+ *                   $ref: '#/components/schemas/Task'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
  */
 router.post('/',
     authenticateToken,
@@ -25,9 +95,97 @@ router.post('/',
 );
 
 /**
- * @route   GET /api/tasks
- * @desc    Obtener todas las tareas con filtros y paginación
- * @access  Private
+ * @swagger
+ * /tasks:
+ *   get:
+ *     summary: Obtener lista de tareas
+ *     description: Retorna una lista paginada de tareas con filtros opcionales. Los usuarios ven tareas según sus permisos.
+ *     tags: [Tareas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Número de página
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 10
+ *         description: Cantidad de elementos por página
+ *       - in: query
+ *         name: projectId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por proyecto
+ *       - in: query
+ *         name: assignedUserId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filtrar por usuario asignado
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PENDIENTE, EN_PROGRESO, COMPLETADA, CANCELADA]
+ *         description: Filtrar por estado de la tarea
+ *       - in: query
+ *         name: priority
+ *         schema:
+ *           type: string
+ *           enum: [BAJA, MEDIA, ALTA, URGENTE]
+ *         description: Filtrar por prioridad
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Buscar por título o descripción
+ *     responses:
+ *       200:
+ *         description: Lista de tareas obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Tareas obtenidas exitosamente"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     tasks:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Task'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         page:
+ *                           type: integer
+ *                           example: 1
+ *                         limit:
+ *                           type: integer
+ *                           example: 10
+ *                         total:
+ *                           type: integer
+ *                           example: 85
+ *                         pages:
+ *                           type: integer
+ *                           example: 9
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  */
 router.get('/',
     authenticateToken,
@@ -35,9 +193,44 @@ router.get('/',
 );
 
 /**
- * @route   GET /api/tasks/:id
- * @desc    Obtener tarea por ID
- * @access  Private
+ * @swagger
+ * /tasks/{id}:
+ *   get:
+ *     summary: Obtener tarea por ID
+ *     description: Retorna la información detallada de una tarea específica.
+ *     tags: [Tareas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID de la tarea
+ *     responses:
+ *       200:
+ *         description: Tarea obtenida exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Tarea obtenida exitosamente"
+ *                 data:
+ *                   $ref: '#/components/schemas/Task'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
  */
 router.get('/:id',
     authenticateToken,
