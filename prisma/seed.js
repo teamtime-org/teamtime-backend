@@ -214,12 +214,12 @@ async function main() {
     const proyectos = await Promise.all([
         prisma.project.create({
             data: {
-                name: 'Campaña Q1 2024 - Fibra Óptica',
+                name: 'Campaña Q1 2025 - Fibra Óptica',
                 description: 'Campaña comercial para promocionar servicios de fibra óptica',
                 areaId: areas[0].id, // Ventas
                 priority: 'HIGH',
-                startDate: new Date('2024-01-01'),
-                endDate: new Date('2024-03-31'),
+                startDate: new Date('2025-01-01'),
+                endDate: new Date('2025-03-31'),
                 estimatedHours: 320,
                 createdBy: coordinadores[0].id,
             },
@@ -230,8 +230,8 @@ async function main() {
                 description: 'Implementación y configuración del nuevo sistema CRM corporativo',
                 areaId: areas[1].id, // PMO
                 priority: 'URGENT',
-                startDate: new Date('2024-02-01'),
-                endDate: new Date('2024-07-31'),
+                startDate: new Date('2025-02-01'),
+                endDate: new Date('2025-07-31'),
                 estimatedHours: 800,
                 createdBy: coordinadores[1].id,
             },
@@ -242,8 +242,8 @@ async function main() {
                 description: 'Optimización de procesos y herramientas del call center',
                 areaId: areas[2].id, // Atención al Cliente
                 priority: 'MEDIUM',
-                startDate: new Date('2024-01-15'),
-                endDate: new Date('2024-04-15'),
+                startDate: new Date('2025-01-15'),
+                endDate: new Date('2025-04-15'),
                 estimatedHours: 240,
                 createdBy: coordinadores[2].id,
             },
@@ -254,8 +254,8 @@ async function main() {
                 description: 'Instalación y configuración de nueva infraestructura 5G',
                 areaId: areas[3].id, // Infraestructura
                 priority: 'URGENT',
-                startDate: new Date('2024-03-01'),
-                endDate: new Date('2024-12-31'),
+                startDate: new Date('2025-03-01'),
+                endDate: new Date('2025-12-31'),
                 estimatedHours: 1200,
                 createdBy: coordinadores[3].id,
             },
@@ -338,7 +338,7 @@ async function main() {
                 assignedTo: colaboradores[0].id, // Patricia (Ventas)
                 estimatedHours: 20,
                 createdBy: coordinadores[0].id,
-                dueDate: new Date('2024-01-15'),
+                dueDate: new Date('2025-01-15'),
             },
         }),
         prisma.task.create({
@@ -350,7 +350,7 @@ async function main() {
                 assignedTo: colaboradores[1].id, // Diego (Ventas)
                 estimatedHours: 24,
                 createdBy: coordinadores[0].id,
-                dueDate: new Date('2024-01-20'),
+                dueDate: new Date('2025-01-20'),
             },
         }),
         // Tareas del proyecto Sistema CRM
@@ -363,7 +363,7 @@ async function main() {
                 assignedTo: colaboradores[2].id, // Sofía (PMO)
                 estimatedHours: 40,
                 createdBy: coordinadores[1].id,
-                dueDate: new Date('2024-02-15'),
+                dueDate: new Date('2025-02-15'),
             },
         }),
         prisma.task.create({
@@ -375,7 +375,7 @@ async function main() {
                 assignedTo: colaboradores[3].id, // Miguel (PMO)
                 estimatedHours: 32,
                 createdBy: coordinadores[1].id,
-                dueDate: new Date('2024-02-28'),
+                dueDate: new Date('2025-02-28'),
             },
         }),
         // Tareas del proyecto Mejora Call Center
@@ -388,7 +388,7 @@ async function main() {
                 assignedTo: colaboradores[4].id, // Carmen (Atención al Cliente)
                 estimatedHours: 16,
                 createdBy: coordinadores[2].id,
-                dueDate: new Date('2024-02-01'),
+                dueDate: new Date('2025-02-01'),
             },
         }),
         prisma.task.create({
@@ -400,7 +400,7 @@ async function main() {
                 assignedTo: colaboradores[5].id, // Eduardo (Atención al Cliente)
                 estimatedHours: 28,
                 createdBy: coordinadores[2].id,
-                dueDate: new Date('2024-03-01'),
+                dueDate: new Date('2025-03-01'),
             },
         }),
         // Tareas del proyecto Expansión Red 5G
@@ -413,7 +413,7 @@ async function main() {
                 assignedTo: colaboradores[6].id, // Alejandro (Infraestructura)
                 estimatedHours: 80,
                 createdBy: coordinadores[3].id,
-                dueDate: new Date('2024-04-30'),
+                dueDate: new Date('2025-04-30'),
             },
         }),
         prisma.task.create({
@@ -425,7 +425,7 @@ async function main() {
                 assignedTo: colaboradores[7].id, // Valeria (Infraestructura)
                 estimatedHours: 60,
                 createdBy: coordinadores[3].id,
-                dueDate: new Date('2024-05-15'),
+                dueDate: new Date('2025-05-15'),
             },
         }),
         // Tareas adicionales específicas de telecomunicaciones
@@ -438,7 +438,7 @@ async function main() {
                 assignedTo: colaboradores[0].id, // Patricia (Ventas)
                 estimatedHours: 16,
                 createdBy: coordinadores[0].id,
-                dueDate: new Date('2024-02-05'),
+                dueDate: new Date('2025-02-05'),
             },
         }),
         prisma.task.create({
@@ -450,7 +450,7 @@ async function main() {
                 assignedTo: colaboradores[2].id, // Sofía (PMO)
                 estimatedHours: 25,
                 createdBy: coordinadores[1].id,
-                dueDate: new Date('2024-03-10'),
+                dueDate: new Date('2025-03-10'),
             },
         }),
         prisma.task.create({
@@ -462,7 +462,7 @@ async function main() {
                 assignedTo: colaboradores[4].id, // Carmen (Atención al Cliente)
                 estimatedHours: 20,
                 createdBy: coordinadores[2].id,
-                dueDate: new Date('2024-02-20'),
+                dueDate: new Date('2025-02-20'),
             },
         }),
         prisma.task.create({
@@ -474,42 +474,42 @@ async function main() {
                 assignedTo: colaboradores[6].id, // Alejandro (Infraestructura)
                 estimatedHours: 40,
                 createdBy: coordinadores[3].id,
-                dueDate: new Date('2024-06-15'),
+                dueDate: new Date('2025-06-15'),
             },
         }),
     ]);
 
-    // 8. Crear períodos de tiempo (quincenas del año 2024)
+    // 8. Crear períodos de tiempo (quincenas del año 2025)
     const periodos = [];
     for (let month = 1; month <= 12; month++) {
         // Primera quincena (1-15)
         const firstPeriod = await prisma.timePeriod.create({
             data: {
-                year: 2024,
+                year: 2025,
                 month,
                 periodNumber: 1,
-                startDate: new Date(2024, month - 1, 1),
-                endDate: new Date(2024, month - 1, 15),
+                startDate: new Date(2025, month - 1, 1),
+                endDate: new Date(2025, month - 1, 15),
             },
         });
         periodos.push(firstPeriod);
 
         // Segunda quincena (16-fin de mes)
-        const lastDay = new Date(2024, month, 0).getDate(); // Último día del mes
+        const lastDay = new Date(2025, month, 0).getDate(); // Último día del mes
         const secondPeriod = await prisma.timePeriod.create({
             data: {
-                year: 2024,
+                year: 2025,
                 month,
                 periodNumber: 2,
-                startDate: new Date(2024, month - 1, 16),
-                endDate: new Date(2024, month - 1, lastDay),
+                startDate: new Date(2025, month - 1, 16),
+                endDate: new Date(2025, month - 1, lastDay),
             },
         });
         periodos.push(secondPeriod);
     }
 
     // 9. Crear algunas entradas de tiempo de ejemplo
-    const enero2024Periodo1 = periodos.find(p => p.year === 2024 && p.month === 1 && p.periodNumber === 1);
+    const enero2025Periodo1 = periodos.find(p => p.year === 2025 && p.month === 1 && p.periodNumber === 1);
 
     await Promise.all([
         prisma.timeEntry.create({
@@ -517,8 +517,8 @@ async function main() {
                 userId: colaboradores[0].id, // Patricia (Ventas)
                 projectId: proyectos[0].id,
                 taskId: tareas[0].id,
-                timePeriodId: enero2024Periodo1.id,
-                date: new Date('2024-01-02'),
+                timePeriodId: enero2025Periodo1.id,
+                date: new Date('2025-01-02'),
                 hours: 8,
                 description: 'Inicio del análisis de mercado objetivo para fibra óptica',
             },
@@ -528,8 +528,8 @@ async function main() {
                 userId: colaboradores[0].id, // Patricia (Ventas)
                 projectId: proyectos[0].id,
                 taskId: tareas[0].id,
-                timePeriodId: enero2024Periodo1.id,
-                date: new Date('2024-01-03'),
+                timePeriodId: enero2025Periodo1.id,
+                date: new Date('2025-01-03'),
                 hours: 6,
                 description: 'Investigación de segmentos de clientes potenciales',
             },
@@ -539,8 +539,8 @@ async function main() {
                 userId: colaboradores[1].id, // Diego (Ventas)
                 projectId: proyectos[0].id,
                 taskId: tareas[1].id,
-                timePeriodId: enero2024Periodo1.id,
-                date: new Date('2024-01-02'),
+                timePeriodId: enero2025Periodo1.id,
+                date: new Date('2025-01-02'),
                 hours: 7,
                 description: 'Diseño inicial de material promocional para fibra óptica',
             },
