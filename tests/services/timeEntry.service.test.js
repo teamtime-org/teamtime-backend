@@ -70,7 +70,7 @@ describe('TimeEntryService', () => {
             taskId: 'task-1',
             userId: 'user-1',
             hours: 2.5,
-            date: new Date('2024-01-15'),
+            date: new Date('2025-01-15'),
             description: 'Test work'
         };
 
@@ -395,11 +395,11 @@ describe('TimeEntryService', () => {
             role: USER_ROLES.COLABORADOR
         };
 
-        const testDate = new Date('2024-01-15');
+        const testDate = new Date('2025-01-15');
 
         it('debería obtener registros de tiempo por fecha exitosamente', async () => {
-            const startOfDayMock = new Date('2024-01-15T00:00:00');
-            const endOfDayMock = new Date('2024-01-15T23:59:59');
+            const startOfDayMock = new Date('2025-01-15T00:00:00');
+            const endOfDayMock = new Date('2025-01-15T23:59:59');
 
             dateUtils.startOfDay.mockReturnValue(startOfDayMock);
             dateUtils.endOfDay.mockReturnValue(endOfDayMock);
@@ -414,8 +414,8 @@ describe('TimeEntryService', () => {
         });
 
         it('debería permitir al usuario obtener sus propios registros', async () => {
-            dateUtils.startOfDay.mockReturnValue(new Date('2024-01-15T00:00:00'));
-            dateUtils.endOfDay.mockReturnValue(new Date('2024-01-15T23:59:59'));
+            dateUtils.startOfDay.mockReturnValue(new Date('2025-01-15T00:00:00'));
+            dateUtils.endOfDay.mockReturnValue(new Date('2025-01-15T23:59:59'));
             mockTimeEntryRepository.findByDateRange.mockResolvedValue(mockTimeEntries);
 
             const result = await timeEntryService.getTimeEntriesByDate('user-1', testDate, mockCollaborator);
@@ -435,7 +435,7 @@ describe('TimeEntryService', () => {
         const mockTimeEntryData = {
             userId: 'user-1',
             hours: 2.5,
-            date: new Date('2024-01-15')
+            date: new Date('2025-01-15')
         };
 
         beforeEach(() => {

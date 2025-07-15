@@ -31,9 +31,15 @@ class TaskService {
                 throw new Error(ERROR_MESSAGES.FORBIDDEN);
             }
 
-            // Verificar fechas
-            if (taskData.dueDate && new Date(taskData.dueDate) < new Date()) {
-                throw new Error('La fecha de vencimiento no puede ser en el pasado');
+            // Verificar fechas - permitir fechas de hoy en adelante
+            if (taskData.dueDate) {
+                const dueDate = new Date(taskData.dueDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Establecer a medianoche para comparar solo fechas
+                
+                if (dueDate < today) {
+                    throw new Error('La fecha de vencimiento no puede ser anterior a hoy');
+                }
             }
 
             // Verificar que la fecha esté dentro del rango del proyecto
@@ -120,9 +126,15 @@ class TaskService {
                 throw new Error(ERROR_MESSAGES.FORBIDDEN);
             }
 
-            // Verificar fechas
-            if (taskData.dueDate && new Date(taskData.dueDate) < new Date()) {
-                throw new Error('La fecha de vencimiento no puede ser en el pasado');
+            // Verificar fechas - permitir fechas de hoy en adelante
+            if (taskData.dueDate) {
+                const dueDate = new Date(taskData.dueDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0); // Establecer a medianoche para comparar solo fechas
+                
+                if (dueDate < today) {
+                    throw new Error('La fecha de vencimiento no puede ser anterior a hoy');
+                }
             }
 
             const updatedTask = await this.taskRepository.update(taskId, taskData);

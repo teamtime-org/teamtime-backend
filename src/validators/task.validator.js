@@ -60,11 +60,20 @@ const createTaskSchema = Joi.object({
 
     dueDate: Joi.date()
         .iso()
-        .min('now')
+        .min(new Date().toISOString().split('T')[0])
         .messages({
             'date.base': 'La fecha límite debe ser una fecha válida',
             'date.format': 'La fecha límite debe estar en formato ISO (YYYY-MM-DD)',
-            'date.min': 'La fecha límite debe ser futura',
+            'date.min': 'La fecha límite no puede ser anterior a hoy',
+        }),
+
+    tags: Joi.array()
+        .items(Joi.string().trim().max(50))
+        .max(10)
+        .messages({
+            'array.base': 'Los tags deben ser un array',
+            'string.max': 'Cada tag no puede tener más de 50 caracteres',
+            'array.max': 'No se permiten más de 10 tags',
         }),
 });
 
@@ -119,15 +128,26 @@ const updateTaskSchema = Joi.object({
 
     dueDate: Joi.date()
         .iso()
+        .min(new Date().toISOString().split('T')[0])
         .allow(null)
         .messages({
             'date.base': 'La fecha límite debe ser una fecha válida',
             'date.format': 'La fecha límite debe estar en formato ISO (YYYY-MM-DD)',
+            'date.min': 'La fecha límite no puede ser anterior a hoy',
         }),
 
     isActive: Joi.boolean()
         .messages({
             'boolean.base': 'El estado activo debe ser verdadero o falso',
+        }),
+
+    tags: Joi.array()
+        .items(Joi.string().trim().max(50))
+        .max(10)
+        .messages({
+            'array.base': 'Los tags deben ser un array',
+            'string.max': 'Cada tag no puede tener más de 50 caracteres',
+            'array.max': 'No se permiten más de 10 tags',
         }),
 });
 
@@ -290,7 +310,7 @@ const taskTimeReportSchema = Joi.object({
 module.exports = {
     createTaskSchema,
     updateTaskSchema,
-    updateTaskStatusSchema,
+    changeTaskStatusSchema: updateTaskStatusSchema,
     assignTaskSchema,
     taskFiltersSchema,
     taskIdSchema,
