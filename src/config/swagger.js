@@ -531,7 +531,23 @@ const swaggerUiOptions = {
         docExpansion: 'none',
         filter: true,
         showRequestHeaders: true,
-        tryItOutEnabled: true
+        tryItOutEnabled: true,
+        supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch'],
+        defaultModelRendering: 'model',
+        defaultModelExpandDepth: 2,
+        defaultModelsExpandDepth: 1,
+        validatorUrl: null, // Deshabilita el validador remoto que puede causar problemas con SSL
+        url: null, // Usar la especificación local
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+            'SwaggerUIBundle.presets.apis',
+            'SwaggerUIBundle.presets.standalone'
+        ],
+        plugins: [
+            'SwaggerUIBundle.plugins.DownloadUrl'
+        ],
+        layout: 'StandaloneLayout'
     }
 };
 

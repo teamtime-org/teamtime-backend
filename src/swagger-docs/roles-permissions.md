@@ -122,7 +122,7 @@ La validación se realiza en múltiples niveles:
 ```bash
 curl -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@teamtime.com", "password": "admin123"}'
+  -d '{"email": "admin@telecomcorp.com", "password": "password123"}'
 ```
 
 ### Usar token en petición protegida
