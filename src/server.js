@@ -4,12 +4,11 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
-require('express-async-errors');
-
 const config = require('./config');
 const routes = require('./routes');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const logger = require('./utils/logger');
+const { specs, swaggerUi, swaggerUiOptions } = require('./config/swagger');
 
 /**
  * Crear aplicación Express
@@ -19,21 +18,32 @@ const app = express();
 /**
  * Configurar middlewares de seguridad
  */
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            scriptSrc: ["'self'"],
-            imgSrc: ["'self'", "data:", "https:"],
+if (config.NODE_ENV === 'production') {
+    app.use(helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                scriptSrc: ["'self'"],
+                imgSrc: ["'self'", "data:", "https:"],
+            },
         },
-    },
-    hsts: {
-        maxAge: 31536000,
-        includeSubDomains: true,
-        preload: true
-    }
-}));
+        hsts: {
+            maxAge: 31536000,
+            includeSubDomains: true,
+            preload: true
+        }
+    }));
+} else {
+    // Configuración más permisiva para desarrollo - deshabilitar CSP completamente
+    app.use(helmet({
+        contentSecurityPolicy: false, // Deshabilitar CSP completamente en desarrollo
+        hsts: false, // Deshabilitar HSTS en desarrollo
+        crossOriginEmbedderPolicy: false,
+        crossOriginOpenerPolicy: false,
+        crossOriginResourcePolicy: false
+    }));
+}
 
 /**
  * Configurar CORS
@@ -46,17 +56,24 @@ app.use(cors({
 }));
 
 /**
- * Rate limiting
+ * Rate limiting (excluir documentación en desarrollo)
  */
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 100, // límite de 100 requests por ventana por IP
+    max: 200, // límite de 100 requests por ventana por IP
     message: {
         success: false,
         message: 'Demasiadas peticiones desde esta IP, intenta de nuevo más tarde.'
     },
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => {
+        // En desarrollo, excluir rutas de documentación del rate limiting
+        if (config.NODE_ENV !== 'production') {
+            return req.path.startsWith('/api/docs') || req.path.startsWith('/swagger-ui-assets');
+        }
+        return false;
+    }
 });
 
 app.use('/api', limiter);
@@ -79,6 +96,69 @@ if (config.NODE_ENV === 'production') {
     }));
 } else {
     app.use(morgan('dev'));
+}
+
+/**
+ * Configuración de Swagger UI para documentación de API
+ */
+app.use('/api/docs', (req, res, next) => {
+    // Headers específicos para Safari y otros navegadores
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    // Forzar protocolo HTTP en desarrollo
+    if (config.NODE_ENV !== 'production') {
+        res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: http: https:; img-src 'self' data: http: https:; style-src 'self' 'unsafe-inline' http: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' http: https:;");
+    }
+    next();
+}, swaggerUi.serve, swaggerUi.setup(specs, swaggerUiOptions));
+
+/**
+ * Endpoint para obtener especificación OpenAPI en formato JSON
+ */
+app.get('/api/docs.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(specs);
+});
+
+/**
+ * Endpoint de salud para verificar estado del servidor
+ */
+app.get('/api/health', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Servidor funcionando correctamente',
+        data: {
+            status: 'OK',
+            timestamp: new Date().toISOString(),
+            environment: config.NODE_ENV,
+            version: '1.0.0'
+        }
+    });
+});
+
+/**
+ * Servir assets de Swagger UI de forma local para evitar problemas SSL
+ */
+if (config.NODE_ENV !== 'production') {
+    const path = require('path');
+    const swaggerUiAssetPath = path.dirname(require.resolve('swagger-ui-dist/package.json'));
+    app.use('/swagger-ui-assets', express.static(swaggerUiAssetPath));
+
+    // Ruta alternativa para Safari con HTML personalizado
+    app.get('/api/docs-safari', (req, res) => {
+        const fs = require('fs');
+        const htmlPath = path.join(__dirname, 'views', 'swagger-custom.html');
+        res.setHeader('Content-Type', 'text/html');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.sendFile(htmlPath);
+    });
 }
 
 /**
@@ -139,11 +219,9 @@ const startServer = async () => {
             logger.info(`🚀 Servidor iniciado en puerto ${PORT}`);
             logger.info(`📝 Ambiente: ${config.NODE_ENV}`);
             logger.info(`🔗 API disponible en: http://localhost:${PORT}/api`);
+            logger.info(`� Documentación Swagger: http://localhost:${PORT}/api/docs`);
+            logger.info(`� OpenAPI JSON: http://localhost:${PORT}/api/docs.json`);
             logger.info(`💾 Base de datos: PostgreSQL`);
-
-            if (config.NODE_ENV === 'development') {
-                logger.info(`📚 Documentación: http://localhost:${PORT}/api/docs`);
-            }
         });
     } catch (error) {
         logger.error('Error al iniciar el servidor:', error);

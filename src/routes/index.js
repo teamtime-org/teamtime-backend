@@ -14,6 +14,36 @@ const router = express.Router();
  * Main routes configuration
  */
 
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Health check del sistema
+ *     description: Verifica el estado de salud del servicio API.
+ *     tags: [Sistema]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Servicio funcionando correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: OK
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                   example: "2025-07-04T10:30:00.000Z"
+ *                 service:
+ *                   type: string
+ *                   example: TeamTime API
+ *                 version:
+ *                   type: string
+ *                   example: "1.0.0"
+ */
 // Health check endpoint
 router.get('/health', (req, res) => {
     res.json({
