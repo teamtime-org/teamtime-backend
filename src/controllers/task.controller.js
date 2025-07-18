@@ -239,6 +239,30 @@ class TaskController {
             return ApiResponse.error(res, error.message, 400);
         }
     };
+
+    /**
+     * Asignación múltiple de tareas
+     */
+    bulkAssignTasks = async (req, res) => {
+        try {
+            const { taskIds, userId } = req.body;
+
+            if (!Array.isArray(taskIds) || taskIds.length === 0) {
+                return ApiResponse.error(res, 'Se requiere un array de IDs de tareas', 400);
+            }
+
+            if (!userId) {
+                return ApiResponse.error(res, 'Se requiere el ID del usuario asignado', 400);
+            }
+
+            const result = await this.taskService.bulkAssignTasks(taskIds, userId, req.user);
+
+            return ApiResponse.success(res, result, 'Tareas asignadas exitosamente');
+        } catch (error) {
+            logger.error('Error en asignación múltiple de tareas:', error);
+            return ApiResponse.error(res, error.message, 400);
+        }
+    };
 }
 
 module.exports = new TaskController();

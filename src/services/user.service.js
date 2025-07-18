@@ -85,7 +85,8 @@ class UserService {
                 {
                     userId: user.id,
                     email: user.email,
-                    role: user.role
+                    role: user.role,
+                    areaId: user.areaId
                 },
                 config.JWT_SECRET,
                 { expiresIn: config.JWT_EXPIRES_IN }
@@ -172,6 +173,11 @@ class UserService {
             const canUpdate = this.canUserUpdateUser(requestingUser, existingUser);
             if (!canUpdate) {
                 throw new Error(ERROR_MESSAGES.FORBIDDEN);
+            }
+
+            // Solo administradores pueden cambiar roles
+            if (userData.role && requestingUser.role !== USER_ROLES.ADMINISTRADOR) {
+                throw new Error('Solo los administradores pueden cambiar roles de usuario');
             }
 
             // Si se actualiza email, verificar que no exista

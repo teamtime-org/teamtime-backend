@@ -51,8 +51,14 @@ class UserRepository {
      * @returns {Promise<Object>}
      */
     async create(userData) {
+        // Convertir string vacío a null para areaId
+        const processedUserData = {
+            ...userData,
+            areaId: userData.areaId === '' ? null : userData.areaId
+        };
+
         return await prisma.user.create({
-            data: userData,
+            data: processedUserData,
             include: {
                 area: {
                     select: {
@@ -72,9 +78,15 @@ class UserRepository {
      * @returns {Promise<Object>}
      */
     async update(id, updateData) {
+        // Convertir string vacío a null para areaId
+        const processedUpdateData = {
+            ...updateData,
+            areaId: updateData.areaId === '' ? null : updateData.areaId
+        };
+
         return await prisma.user.update({
             where: { id },
-            data: updateData,
+            data: processedUpdateData,
             include: {
                 area: {
                     select: {

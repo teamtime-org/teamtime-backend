@@ -521,6 +521,17 @@ class TaskRepository {
     }
 
     /**
+     * Obtener el número de entradas de tiempo para una tarea
+     * @param {string} taskId 
+     * @returns {Promise<number>}
+     */
+    async getTimeEntriesCount(taskId) {
+        return await prisma.timeEntry.count({
+            where: { taskId }
+        });
+    }
+
+    /**
      * Obtener estadísticas generales de tareas
      * @param {Object} filters 
      * @returns {Promise<Object>}

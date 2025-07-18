@@ -65,6 +65,11 @@ class UserController {
             if (areaId) filters.areaId = areaId;
             if (isActive !== undefined) filters.isActive = isActive === 'true';
 
+            // Si el usuario es coordinador, solo puede ver usuarios de su área
+            if (req.user.role === 'COORDINADOR') {
+                filters.areaId = req.user.areaId;
+            }
+
             const pagination = {
                 page: pageNumber,
                 limit: pageSize

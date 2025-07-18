@@ -145,22 +145,19 @@ class ProjectRepository {
         const where = {};
 
         // Aplicar filtros de acceso por rol
-        if (userRole === 'COORDINADOR') {
-            // Los coordinadores solo ven proyectos que crearon
-            where.createdBy = userId;
-        } else if (userRole === 'COLABORADOR') {
-            // Los colaboradores solo ven proyectos asignados
-            where.assignments = {
-                some: {
-                    userId,
-                    isActive: true,
-                },
-            };
-        }
+        // Los coordinadores y colaboradores ven proyectos de su área
+        // La lógica de área se maneja en los filtros adicionales (filters.areaId)
+        // No se aplican restricciones adicionales por rol aquí
+        // Los administradores pueden ver todos los proyectos
+
+        console.log('ProjectRepository.findMany - filters:', filters);
+        console.log('ProjectRepository.findMany - userRole:', userRole);
+        console.log('ProjectRepository.findMany - userId:', userId);
 
         // Aplicar filtros adicionales
         if (filters.areaId) {
             where.areaId = filters.areaId;
+            console.log('ProjectRepository.findMany - Applied areaId filter:', filters.areaId);
         }
 
         if (filters.status) {
@@ -246,6 +243,10 @@ class ProjectRepository {
             },
         });
 
+        console.log('ProjectRepository.findMany - where clause:', where);
+        console.log('ProjectRepository.findMany - found projects:', projects.length);
+        console.log('ProjectRepository.findMany - total count:', total);
+        
         return { projects, total };
     }
 

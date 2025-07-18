@@ -78,7 +78,7 @@ class ProjectService {
             // Aplicar filtros según permisos del usuario
             const userFilters = this.applyUserFilters(filters, requestingUser);
 
-            return await this.projectRepository.findMany(userFilters, pagination);
+            return await this.projectRepository.findMany(userFilters, pagination, requestingUser.role, requestingUser.userId);
         } catch (error) {
             logger.error('Error al obtener proyectos:', error);
             throw error;
@@ -397,10 +397,12 @@ class ProjectService {
     applyUserFilters(filters, user) {
         // Administradores ven todos los proyectos
         if (user.role === USER_ROLES.ADMINISTRADOR) {
+            logger.info(`Admin user ${user.email} accessing all projects`);
             return filters;
         }
 
         // Otros roles solo ven proyectos de su área
+        logger.info(`User ${user.email} (role: ${user.role}) filtering projects by areaId: ${user.areaId}`);
         return {
             ...filters,
             areaId: user.areaId,
