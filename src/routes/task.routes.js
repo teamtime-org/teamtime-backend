@@ -7,7 +7,8 @@ const {
     createTaskSchema,
     updateTaskSchema,
     changeTaskStatusSchema,
-    assignTaskSchema
+    assignTaskSchema,
+    bulkAssignTasksSchema
 } = require('../validators/task.validator');
 
 const router = express.Router();
@@ -278,6 +279,17 @@ router.patch('/:id/assign',
     authenticateToken,
     validate(assignTaskSchema),
     taskController.assignTask
+);
+
+/**
+ * @route   POST /api/tasks/bulk-assign
+ * @desc    Asignación múltiple de tareas
+ * @access  Private (Administrador/Coordinador del área)
+ */
+router.post('/bulk-assign',
+    authenticateToken,
+    validate(bulkAssignTasksSchema),
+    taskController.bulkAssignTasks
 );
 
 /**

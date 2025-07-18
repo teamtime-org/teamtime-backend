@@ -18,9 +18,20 @@ class AreaService {
      */
     async createArea(areaData, requestingUser) {
         try {
+            // Validar que el usuario existe
+            if (!requestingUser || !requestingUser.userId) {
+                throw new Error('Usuario no autenticado');
+            }
+
             // Solo administradores pueden crear áreas
             if (requestingUser.role !== USER_ROLES.ADMINISTRADOR) {
                 throw new Error(ERROR_MESSAGES.FORBIDDEN);
+            }
+
+            // Verificar que el usuario existe en la base de datos
+            const userExists = await this.getUserById(requestingUser.userId);
+            if (!userExists) {
+                throw new Error('Usuario no encontrado en la base de datos');
             }
 
             // Verificar si el nombre ya existe

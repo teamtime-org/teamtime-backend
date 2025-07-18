@@ -1,5 +1,6 @@
 const TaskRepository = require('../repositories/task.repository');
 const ProjectRepository = require('../repositories/project.repository');
+const UserRepository = require('../repositories/user.repository');
 const { USER_ROLES, TASK_STATUS, ERROR_MESSAGES } = require('../utils/constants');
 const logger = require('../utils/logger');
 
@@ -10,6 +11,7 @@ class TaskService {
     constructor() {
         this.taskRepository = new TaskRepository();
         this.projectRepository = new ProjectRepository();
+        this.userRepository = new UserRepository();
     }
 
     /**
@@ -245,6 +247,72 @@ class TaskService {
             return updatedTask;
         } catch (error) {
             logger.error('Error al asignar tarea:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Asignación múltiple de tareas
+     * @param {Array} taskIds 
+     * @param {string} userId 
+     * @param {Object} requestingUser 
+     * @returns {Promise<Object>}
+     */
+    async bulkAssignTasks(taskIds, userId, requestingUser) {
+        try {
+            const results = {
+                successful: [],
+                failed: [],
+                total: taskIds.length
+            };
+
+            // Verificar que el usuario asignado existe
+            const assigneeExists = await this.userRepository.findById(userId);
+            if (!assigneeExists) {
+                throw new Error('Usuario asignado no encontrado');
+            }
+
+            for (const taskId of taskIds) {
+                try {
+                    // Verificar que la tarea existe
+                    const task = await this.taskRepository.findById(taskId);
+                    if (!task) {
+                        results.failed.push({
+                            taskId,
+                            error: 'Tarea no encontrada'
+                        });
+                        continue;
+                    }
+
+                    // Verificar permisos
+                    if (!this.canUserAssignTask(requestingUser, task)) {
+                        results.failed.push({
+                            taskId,
+                            error: 'Sin permisos para asignar esta tarea'
+                        });
+                        continue;
+                    }
+
+                    // Asignar la tarea
+                    const updatedTask = await this.taskRepository.update(taskId, { assignedTo: userId });
+                    results.successful.push({
+                        taskId,
+                        task: updatedTask
+                    });
+
+                    logger.info(`Tarea ${task.title} asignada a usuario ${userId} por ${requestingUser.email} (bulk operation)`);
+                } catch (error) {
+                    results.failed.push({
+                        taskId,
+                        error: error.message
+                    });
+                }
+            }
+
+            logger.info(`Asignación múltiple completada: ${results.successful.length} exitosas, ${results.failed.length} fallidas`);
+            return results;
+        } catch (error) {
+            logger.error('Error en asignación múltiple de tareas:', error);
             throw error;
         }
     }

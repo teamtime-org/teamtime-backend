@@ -67,7 +67,7 @@ const createUserSchema = Joi.object({
         .when('role', {
             is: Joi.valid(USER_ROLES.COORDINADOR, USER_ROLES.COLABORADOR),
             then: Joi.required(),
-            otherwise: Joi.optional().allow(null),
+            otherwise: Joi.optional().allow(null, ''),
         })
         .messages({
             'string.uuid': 'El ID del área debe ser un UUID válido',
@@ -99,10 +99,22 @@ const updateUserSchema = Joi.object({
             'string.pattern.base': 'El apellido solo puede contener letras y espacios',
         }),
 
+    role: Joi.string()
+        .valid(...Object.values(USER_ROLES))
+        .messages({
+            'any.only': 'El rol debe ser ADMINISTRADOR, COORDINADOR o COLABORADOR',
+        }),
+
     areaId: Joi.string()
         .uuid()
+        .when('role', {
+            is: Joi.valid(USER_ROLES.COORDINADOR, USER_ROLES.COLABORADOR),
+            then: Joi.required(),
+            otherwise: Joi.optional().allow(null, ''),
+        })
         .messages({
             'string.uuid': 'El ID del área debe ser un UUID válido',
+            'any.required': 'El área es requerida para coordinadores y colaboradores',
         }),
 
     isActive: Joi.boolean()
@@ -126,7 +138,7 @@ const changeRoleSchema = Joi.object({
         .when('role', {
             is: Joi.valid(USER_ROLES.COORDINADOR, USER_ROLES.COLABORADOR),
             then: Joi.required(),
-            otherwise: Joi.optional().allow(null),
+            otherwise: Joi.optional().allow(null, ''),
         })
         .messages({
             'string.uuid': 'El ID del área debe ser un UUID válido',

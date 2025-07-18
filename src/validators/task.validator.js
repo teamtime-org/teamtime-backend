@@ -181,6 +181,26 @@ const assignTaskSchema = Joi.object({
         }),
 });
 
+// Esquema para asignación múltiple de tareas
+const bulkAssignTasksSchema = Joi.object({
+    taskIds: Joi.array()
+        .items(Joi.string().uuid())
+        .min(1)
+        .required()
+        .messages({
+            'array.min': 'Se requiere al menos una tarea',
+            'any.required': 'El array de IDs de tareas es requerido',
+            'string.uuid': 'Cada ID de tarea debe ser un UUID válido',
+        }),
+    userId: Joi.string()
+        .uuid()
+        .required()
+        .messages({
+            'string.uuid': 'El ID del usuario debe ser un UUID válido',
+            'any.required': 'El ID del usuario es requerido',
+        }),
+});
+
 // Esquema para filtros de búsqueda de tareas
 const taskFiltersSchema = Joi.object({
     projectId: Joi.string()
@@ -312,6 +332,7 @@ module.exports = {
     updateTaskSchema,
     changeTaskStatusSchema: updateTaskStatusSchema,
     assignTaskSchema,
+    bulkAssignTasksSchema,
     taskFiltersSchema,
     taskIdSchema,
     taskTimeReportSchema,

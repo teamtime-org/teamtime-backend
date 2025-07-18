@@ -120,6 +120,7 @@ describe('UserService', () => {
             firstName: 'Test',
             lastName: 'User',
             role: USER_ROLES.COLABORADOR,
+            areaId: 'area-123',
             isActive: true
         };
 
@@ -140,7 +141,8 @@ describe('UserService', () => {
                 {
                     userId: mockUser.id,
                     email: mockUser.email,
-                    role: mockUser.role
+                    role: mockUser.role,
+                    areaId: mockUser.areaId
                 },
                 expect.any(String),
                 { expiresIn: expect.any(String) }
