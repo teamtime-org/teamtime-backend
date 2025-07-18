@@ -232,10 +232,10 @@ class TimeEntryRepository {
         if (filters.startDate || filters.endDate) {
             where.date = {};
             if (filters.startDate) {
-                where.date.gte = filters.startDate;
+                where.date.gte = new Date(filters.startDate);
             }
             if (filters.endDate) {
-                where.date.lte = filters.endDate;
+                where.date.lte = new Date(filters.endDate);
             }
         }
 

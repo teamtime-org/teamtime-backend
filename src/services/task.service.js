@@ -506,19 +506,41 @@ class TaskService {
             return filters;
         }
 
-        // Obtener proyectos del área del usuario
-        const userProjects = await this.projectRepository.findMany({
-            areaId: user.areaId
-        }, { page: 1, limit: 1000 });
+        // Coordinadores ven tareas de proyectos de su área
+        if (user.role === USER_ROLES.COORDINADOR) {
+            const userProjects = await this.projectRepository.findMany({
+                areaId: user.areaId
+            }, { page: 1, limit: 1000 });
 
-        const projectIds = userProjects.projects.map(p => p.id);
+            const projectIds = userProjects.projects.map(p => p.id);
 
-        return {
-            ...filters,
-            projectId: filters.projectId ?
-                (projectIds.includes(filters.projectId) ? filters.projectId : null) :
-                projectIds,
-        };
+            return {
+                ...filters,
+                projectId: filters.projectId ?
+                    (projectIds.includes(filters.projectId) ? filters.projectId : null) :
+                    projectIds,
+            };
+        }
+
+        // Colaboradores ven tareas de su área O asignadas a ellos
+        if (user.role === USER_ROLES.COLABORADOR) {
+            const userProjects = await this.projectRepository.findMany({
+                areaId: user.areaId
+            }, { page: 1, limit: 1000 });
+
+            const projectIds = userProjects.projects.map(p => p.id);
+
+            return {
+                ...filters,
+                // Permite ver tareas de proyectos de su área O tareas asignadas a ellos
+                OR: [
+                    { projectId: { in: projectIds } },
+                    { assignedTo: user.id }
+                ]
+            };
+        }
+
+        return filters;
     }
 
     /**

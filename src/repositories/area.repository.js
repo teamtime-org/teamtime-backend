@@ -183,6 +183,20 @@ class AreaRepository {
     }
 
     /**
+     * Obtener el número de usuarios activos en un área
+     * @param {string} areaId 
+     * @returns {Promise<number>}
+     */
+    async getActiveUsersCount(areaId) {
+        return await prisma.user.count({
+            where: {
+                areaId,
+                isActive: true
+            }
+        });
+    }
+
+    /**
      * Verificar si el área tiene usuarios asignados
      * @param {string} id 
      * @returns {Promise<boolean>}

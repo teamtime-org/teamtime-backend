@@ -158,7 +158,7 @@ describe('ProjectService', () => {
 
             // Assert
             expect(projectService.applyUserFilters).toHaveBeenCalledWith(mockFilters, mockRequestingUser);
-            expect(mockProjectRepository.findMany).toHaveBeenCalledWith(expectedFilters, mockPagination);
+            expect(mockProjectRepository.findMany).toHaveBeenCalledWith(expectedFilters, mockPagination, mockRequestingUser.role, mockRequestingUser.userId);
             expect(result).toEqual(mockResult);
         });
     });

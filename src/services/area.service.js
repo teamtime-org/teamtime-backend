@@ -1,4 +1,5 @@
 const AreaRepository = require('../repositories/area.repository');
+const UserRepository = require('../repositories/user.repository');
 const { USER_ROLES, ERROR_MESSAGES } = require('../utils/constants');
 const logger = require('../utils/logger');
 
@@ -8,6 +9,21 @@ const logger = require('../utils/logger');
 class AreaService {
     constructor() {
         this.areaRepository = new AreaRepository();
+        this.userRepository = new UserRepository();
+    }
+
+    /**
+     * Obtener usuario por ID
+     * @param {string} userId 
+     * @returns {Promise<Object|null>}
+     */
+    async getUserById(userId) {
+        try {
+            return await this.userRepository.findById(userId);
+        } catch (error) {
+            logger.error('Error al obtener usuario:', error);
+            return null;
+        }
     }
 
     /**

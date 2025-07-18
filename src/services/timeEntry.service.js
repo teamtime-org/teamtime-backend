@@ -330,7 +330,9 @@ class TimeEntryService {
 
         // Colaboradores solo pueden crear registros para sí mismos
         if (user.role === USER_ROLES.COLABORADOR) {
-            return user.id === targetUserId && user.areaId === task.project.areaId;
+            // Pueden crear registros para tareas de su área O asignadas a ellos
+            return user.id === targetUserId && 
+                   (user.areaId === task.project.areaId || task.assignedTo === user.id);
         }
 
         return false;
