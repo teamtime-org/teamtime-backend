@@ -401,6 +401,62 @@ class TimeEntryRepository {
     }
 
     /**
+     * Buscar entrada duplicada (retorna el registro completo)
+     * @param {string} userId 
+     * @param {string} projectId 
+     * @param {string} taskId 
+     * @param {Date} date 
+     * @returns {Promise<Object|null>}
+     */
+    async findDuplicate(userId, projectId, taskId, date) {
+        const where = {
+            userId,
+            projectId,
+            taskId,
+            date,
+        };
+
+        return await prisma.timeEntry.findFirst({
+            where,
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                    },
+                },
+                project: {
+                    select: {
+                        id: true,
+                        name: true,
+                        area: {
+                            select: {
+                                id: true,
+                                name: true,
+                            },
+                        },
+                    },
+                },
+                task: {
+                    select: {
+                        id: true,
+                        title: true,
+                    },
+                },
+                timePeriod: {
+                    select: {
+                        id: true,
+                        year: true,
+                        month: true,
+                        periodNumber: true,
+                    },
+                },
+            },
+        });
+    }
+
+    /**
      * Verificar límite de horas por día
      * @param {string} userId 
      * @param {Date} date 
