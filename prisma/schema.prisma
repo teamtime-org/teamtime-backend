@@ -31,21 +31,26 @@ model User {
   creator             User?               @relation("UserCreator", fields: [createdBy], references: [id])
   createdUsers        User[]              @relation("UserCreator")
 
+  // Relaciones para proyectos Excel
+  mentorProjects      ExcelProject[] @relation("ProjectMentor")
+  coordinatedProjects ExcelProject[] @relation("ProjectCoordinator")
+
   @@map("users")
 }
 
 model Area {
-  id          String    @id @default(uuid())
-  name        String    @unique
-  description String?
-  color       String    @default("#2563EB")
-  createdBy   String    @map("created_by")
-  isActive    Boolean   @default(true) @map("is_active")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  creator     User      @relation("AreaCreator", fields: [createdBy], references: [id])
-  projects    Project[]
-  users       User[]
+  id            String         @id @default(uuid())
+  name          String         @unique
+  description   String?
+  color         String         @default("#2563EB")
+  createdBy     String         @map("created_by")
+  isActive      Boolean        @default(true) @map("is_active")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  creator       User           @relation("AreaCreator", fields: [createdBy], references: [id])
+  projects      Project[]
+  excelProjects ExcelProject[] @relation("ExcelProjectArea")
+  users         User[]
 
   @@map("areas")
 }
@@ -69,6 +74,9 @@ model Project {
   creator        User                @relation("ProjectCreator", fields: [createdBy], references: [id])
   tasks          Task[]
   timeEntries    TimeEntry[]
+
+  // Relación uno-a-uno con detalles de Excel (opcional)
+  excelDetails ExcelProject? @relation("ProjectExcelDetails")
 
   @@map("projects")
 }
@@ -161,6 +169,7 @@ enum ProjectStatus {
   ON_HOLD
   COMPLETED
   CANCELLED
+  AWARDED
 }
 
 enum Priority {
@@ -175,4 +184,147 @@ enum TaskStatus {
   IN_PROGRESS
   REVIEW
   DONE
+}
+
+// Modelo unificado de catálogos
+model Catalog {
+  id          String      @id @default(uuid())
+  type        CatalogType
+  name        String
+  externalId  String?     @map("external_id") // Para IDs del Excel
+  description String?
+  isActive    Boolean     @default(true) @map("is_active")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  // Relaciones con proyectos Excel
+  excelProjectsRisk            ExcelProject[] @relation("ProjectRiskCatalog")
+  excelProjectsType            ExcelProject[] @relation("ProjectTypeCatalog")
+  excelProjectsBusinessLine    ExcelProject[] @relation("ProjectBusinessLineCatalog")
+  excelProjectsOpportunity     ExcelProject[] @relation("ProjectOpportunityCatalog")
+  excelProjectsSegment         ExcelProject[] @relation("ProjectSegmentCatalog")
+  excelProjectsSalesManagement ExcelProject[] @relation("ProjectSalesManagementCatalog")
+  excelProjectsSalesExecutive  ExcelProject[] @relation("ProjectSalesExecutiveCatalog")
+  excelProjectsDesigner        ExcelProject[] @relation("ProjectDesignerCatalog")
+
+  @@unique([type, name])
+  @@map("catalogs")
+}
+
+enum CatalogType {
+  RISK_LEVEL       @map("risk_level")
+  PROJECT_TYPE     @map("project_type")
+  BUSINESS_LINE    @map("business_line")
+  OPPORTUNITY_TYPE @map("opportunity_type")
+  SEGMENT          @map("segment")
+  SALES_MANAGEMENT @map("sales_management")
+  SALES_EXECUTIVE  @map("sales_executive")
+  DESIGNER         @map("designer")
+}
+
+model Supplier {
+  id          String                 @id @default(uuid())
+  name        String                 @unique
+  contactInfo String?                @map("contact_info")
+  description String?
+  isActive    Boolean                @default(true) @map("is_active")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+  projects    ExcelProjectSupplier[]
+
+  @@map("suppliers")
+}
+
+// Modelo extendido para proyectos importados desde Excel
+model ExcelProject {
+  id                      String    @id @default(uuid())
+  excelId                 String?   @unique @map("excel_id") // ID original del Excel
+  title                   String
+  serviceDescription      String?   @map("service_description")
+  generalStatus           String?   @map("general_status")
+  nextSteps               String?   @map("next_steps")
+  assignmentDate          DateTime? @map("assignment_date") @db.Date
+  isStrategicProject      Boolean?  @default(false) @map("is_strategic_project")
+  riskTypes               String[]  @default([]) @map("risk_types")
+  estimatedEndDate        DateTime? @map("estimated_end_date") @db.Date
+  updatedEstimatedEndDate DateTime? @map("updated_estimated_end_date") @db.Date
+  actualEndDate           DateTime? @map("actual_end_date") @db.Date
+  budgetControl           String?   @map("budget_control")
+  totalContractAmountMXN  Decimal?  @map("total_contract_amount_mxn") @db.Decimal(15, 2)
+  income                  Decimal?  @map("income") @db.Decimal(15, 2)
+  contractPeriodMonths    Decimal?  @map("contract_period_months") @db.Decimal(6, 1)
+  monthlyBillingMXN       Decimal?  @map("monthly_billing_mxn") @db.Decimal(12, 2)
+  penalty                 String?   @map("penalty")
+  providersInvolved       String?   @map("providers_involved")
+  awardDate               DateTime? @map("award_date") @db.Date
+  designTransferDate      DateTime? @map("design_transfer_date") @db.Date
+  tenderDeliveryDate      DateTime? @map("tender_delivery_date") @db.Date
+  siebelOrderNumber       String?   @map("siebel_order_number")
+  orderInProgress         String?   @map("order_in_progress")
+  relatedOrders           String?   @map("related_orders")
+  appliesChangeControl    Boolean?  @default(false) @map("applies_change_control")
+  justification           String?   @map("justification")
+  sharePointDocumentation String?   @map("sharepoint_documentation")
+  estratelRepository      String?   @map("estratel_repository")
+
+  // Relaciones con usuarios
+  mentorId      String? @map("mentor_id")
+  coordinatorId String? @map("coordinator_id")
+
+  // Relaciones con catálogos
+  riskLevelId       String? @map("risk_level_id")
+  projectTypeId     String? @map("project_type_id")
+  businessLineId    String? @map("business_line_id")
+  opportunityTypeId String? @map("opportunity_type_id")
+  segmentId         String? @map("segment_id")
+  salesManagementId String? @map("sales_management_id")
+  salesExecutiveId  String? @map("sales_executive_id")
+  designerId        String? @map("designer_id")
+
+  // Relación con área
+  areaId String? @map("area_id")
+
+  // Relación con proyecto principal (requerida)
+  projectId String @unique @map("project_id")
+
+  // Timestamps y metadata
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relaciones
+  mentor      User?                  @relation("ProjectMentor", fields: [mentorId], references: [id])
+  coordinator User?                  @relation("ProjectCoordinator", fields: [coordinatorId], references: [id])
+  area        Area?                  @relation("ExcelProjectArea", fields: [areaId], references: [id])
+  suppliers   ExcelProjectSupplier[]
+
+  // Relaciones con catálogos
+  riskLevel       Catalog? @relation("ProjectRiskCatalog", fields: [riskLevelId], references: [id])
+  projectType     Catalog? @relation("ProjectTypeCatalog", fields: [projectTypeId], references: [id])
+  businessLine    Catalog? @relation("ProjectBusinessLineCatalog", fields: [businessLineId], references: [id])
+  opportunityType Catalog? @relation("ProjectOpportunityCatalog", fields: [opportunityTypeId], references: [id])
+  segment         Catalog? @relation("ProjectSegmentCatalog", fields: [segmentId], references: [id])
+  salesManagement Catalog? @relation("ProjectSalesManagementCatalog", fields: [salesManagementId], references: [id])
+  salesExecutive  Catalog? @relation("ProjectSalesExecutiveCatalog", fields: [salesExecutiveId], references: [id])
+  designer        Catalog? @relation("ProjectDesignerCatalog", fields: [designerId], references: [id])
+
+  // Relación con proyecto principal (obligatoria)
+  project Project @relation("ProjectExcelDetails", fields: [projectId], references: [id])
+
+  @@map("excel_projects")
+}
+
+// Tabla intermedia para relación muchos a muchos entre proyectos Excel y proveedores
+model ExcelProjectSupplier {
+  id             String   @id @default(uuid())
+  excelProjectId String   @map("excel_project_id")
+  supplierId     String   @map("supplier_id")
+  role           String? // Rol del proveedor en el proyecto
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  excelProject ExcelProject @relation(fields: [excelProjectId], references: [id], onDelete: Cascade)
+  supplier     Supplier     @relation(fields: [supplierId], references: [id])
+
+  @@unique([excelProjectId, supplierId])
+  @@map("excel_project_suppliers")
 }

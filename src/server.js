@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const session = require('express-session');
 const config = require('./config');
 const routes = require('./routes');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
@@ -49,10 +50,32 @@ if (config.NODE_ENV === 'production') {
  * Configurar CORS
  */
 app.use(cors({
-    origin: config.CORS_ORIGIN ? config.CORS_ORIGIN.split(',') : ['http://localhost:3000'],
+    origin: config.CORS_ORIGIN ? config.CORS_ORIGIN.split(',') : [
+        'http://localhost:3000',  // React por defecto
+        'http://localhost:5173',  // Vite por defecto
+        'http://localhost:4173',  // Vite preview
+        'http://localhost:3001',  // Alternativo común
+        'http://127.0.0.1:5173',  // Localhost alias
+        'http://127.0.0.1:3000'   // Localhost alias
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    exposedHeaders: ['Content-Disposition'] // Para descargas de archivos
+}));
+
+/**
+ * Configurar sesiones para manejo temporal de reportes
+ */
+app.use(session({
+    secret: config.JWT_SECRET || 'temp-session-secret-for-error-reports',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: config.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 10 * 60 * 1000 // 10 minutos - suficiente para descargar reportes
+    }
 }));
 
 /**
