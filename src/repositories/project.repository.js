@@ -27,6 +27,52 @@ class ProjectRepository {
                     lastName: true,
                 },
             },
+            excelDetails: {
+                select: {
+                    id: true,
+                    totalContractAmountMXN: true,
+                    monthlyBillingMXN: true,
+                    siebelOrderNumber: true,
+                    projectType: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                    salesManagement: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                    mentor: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                        },
+                    },
+                    coordinator: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                        },
+                    },
+                    salesExecutive: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                    designer: {
+                        select: {
+                            id: true,
+                            name: true,
+                        },
+                    },
+                },
+            },
             ...options.include,
         };
 
@@ -185,7 +231,60 @@ class ProjectRepository {
             where.OR = [
                 { name: { contains: filters.search, mode: 'insensitive' } },
                 { description: { contains: filters.search, mode: 'insensitive' } },
+                // Buscar también en detalles de Excel
+                {
+                    excelDetails: {
+                        OR: [
+                            { title: { contains: filters.search, mode: 'insensitive' } },
+                            { serviceDescription: { contains: filters.search, mode: 'insensitive' } },
+                            { siebelOrderNumber: { contains: filters.search, mode: 'insensitive' } },
+                        ]
+                    }
+                }
             ];
+        }
+
+        // Filtros específicos de Excel
+        if (filters.mentorId) {
+            where.excelDetails = {
+                ...where.excelDetails,
+                mentorId: filters.mentorId,
+            };
+        }
+
+        if (filters.coordinatorId) {
+            where.excelDetails = {
+                ...where.excelDetails,
+                coordinatorId: filters.coordinatorId,
+            };
+        }
+
+        if (filters.salesExecutiveId) {
+            where.excelDetails = {
+                ...where.excelDetails,
+                salesExecutiveId: filters.salesExecutiveId,
+            };
+        }
+
+        if (filters.salesManagementId) {
+            where.excelDetails = {
+                ...where.excelDetails,
+                salesManagementId: filters.salesManagementId,
+            };
+        }
+
+        if (filters.siebelOrderNumber) {
+            where.excelDetails = {
+                ...where.excelDetails,
+                siebelOrderNumber: { contains: filters.siebelOrderNumber, mode: 'insensitive' },
+            };
+        }
+
+        if (filters.projectType) {
+            where.excelDetails = {
+                ...where.excelDetails,
+                projectType: { contains: filters.projectType, mode: 'insensitive' },
+            };
         }
 
         if (filters.startDate || filters.endDate) {
@@ -234,6 +333,55 @@ class ProjectRepository {
                         },
                     },
                 },
+                excelDetails: {
+                    select: {
+                        id: true,
+                        totalContractAmountMXN: true,
+                        monthlyBillingMXN: true,
+                        siebelOrderNumber: true,
+                        nextSteps: true,
+                        generalStatus: true,
+                        mentor: {
+                            select: {
+                                id: true,
+                                firstName: true,
+                                lastName: true,
+                            },
+                        },
+                        coordinator: {
+                            select: {
+                                id: true,
+                                firstName: true,
+                                lastName: true,
+                            },
+                        },
+                        // Relaciones con catálogos
+                        projectType: {
+                            select: {
+                                id: true,
+                                name: true,
+                            },
+                        },
+                        salesManagement: {
+                            select: {
+                                id: true,
+                                name: true,
+                            },
+                        },
+                        salesExecutive: {
+                            select: {
+                                id: true,
+                                name: true,
+                            },
+                        },
+                        designer: {
+                            select: {
+                                id: true,
+                                name: true,
+                            },
+                        },
+                    },
+                },
                 _count: {
                     select: {
                         tasks: { where: { isActive: true } },
@@ -246,7 +394,7 @@ class ProjectRepository {
         console.log('ProjectRepository.findMany - where clause:', where);
         console.log('ProjectRepository.findMany - found projects:', projects.length);
         console.log('ProjectRepository.findMany - total count:', total);
-        
+
         return { projects, total };
     }
 

@@ -54,7 +54,14 @@ class ProjectController {
                 priority,
                 areaId,
                 startDate,
-                endDate
+                endDate,
+                // Nuevos filtros de Excel
+                mentorId,
+                coordinatorId,
+                salesExecutiveId,
+                salesManagementId,
+                siebelOrderNumber,
+                projectType
             } = req.query;
 
             // Validar límites de paginación
@@ -68,6 +75,14 @@ class ProjectController {
             if (areaId) filters.areaId = areaId;
             if (startDate) filters.startDate = startDate;
             if (endDate) filters.endDate = endDate;
+
+            // Filtros específicos de Excel
+            if (mentorId) filters.mentorId = mentorId;
+            if (coordinatorId) filters.coordinatorId = coordinatorId;
+            if (salesExecutiveId) filters.salesExecutiveId = salesExecutiveId;
+            if (salesManagementId) filters.salesManagementId = salesManagementId;
+            if (siebelOrderNumber) filters.siebelOrderNumber = siebelOrderNumber;
+            if (projectType) filters.projectType = projectType;
 
             const pagination = {
                 page: pageNumber,
