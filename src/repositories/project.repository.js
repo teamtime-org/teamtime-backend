@@ -227,6 +227,17 @@ class ProjectRepository {
             };
         }
 
+        if (filters.assignedUserId) {
+            // Si es "me", usar el userId actual
+            const targetUserId = filters.assignedUserId === 'me' ? userId : filters.assignedUserId;
+            where.assignments = {
+                some: {
+                    userId: targetUserId,
+                    isActive: true,
+                },
+            };
+        }
+
         if (filters.search) {
             where.OR = [
                 { name: { contains: filters.search, mode: 'insensitive' } },

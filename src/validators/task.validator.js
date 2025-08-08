@@ -43,17 +43,19 @@ const createTaskSchema = Joi.object({
 
     assignedTo: Joi.string()
         .uuid()
+        .allow(null, '')
         .messages({
             'string.uuid': 'El ID del usuario asignado debe ser un UUID válido',
         }),
 
     estimatedHours: Joi.number()
-        .positive()
+        .min(0)
         .precision(2)
         .max(9999.99)
+        .allow(null, '')
         .messages({
             'number.base': 'Las horas estimadas deben ser un número',
-            'number.positive': 'Las horas estimadas deben ser positivas',
+            'number.min': 'Las horas estimadas no pueden ser negativas',
             'number.precision': 'Las horas estimadas pueden tener máximo 2 decimales',
             'number.max': 'Las horas estimadas no pueden ser mayores a 9999.99',
         }),
@@ -61,6 +63,7 @@ const createTaskSchema = Joi.object({
     dueDate: Joi.date()
         .iso()
         .min(new Date().toISOString().split('T')[0])
+        .allow(null, '')
         .messages({
             'date.base': 'La fecha límite debe ser una fecha válida',
             'date.format': 'La fecha límite debe estar en formato ISO (YYYY-MM-DD)',

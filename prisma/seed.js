@@ -11,7 +11,11 @@ async function main() {
     await prisma.timePeriod.deleteMany();
     await prisma.task.deleteMany();
     await prisma.projectAssignment.deleteMany();
+    await prisma.excelProjectSupplier.deleteMany();
+    await prisma.excelProject.deleteMany();
     await prisma.project.deleteMany();
+    await prisma.catalog.deleteMany();
+    await prisma.supplier.deleteMany();
     await prisma.area.deleteMany();
     await prisma.user.deleteMany();
 
@@ -479,7 +483,85 @@ async function main() {
         }),
     ]);
 
-    // 8. Crear períodos de tiempo (quincenas del año 2025)
+    // 8. Crear catálogos básicos para filtros
+    await Promise.all([
+        // Tipos de proyecto
+        prisma.catalog.create({
+            data: {
+                type: 'PROJECT_TYPE',
+                name: 'Implementación',
+                description: 'Proyectos de implementación de sistemas',
+            },
+        }),
+        prisma.catalog.create({
+            data: {
+                type: 'PROJECT_TYPE',
+                name: 'Migración',
+                description: 'Proyectos de migración de datos',
+            },
+        }),
+        prisma.catalog.create({
+            data: {
+                type: 'PROJECT_TYPE',
+                name: 'Infraestructura',
+                description: 'Proyectos de infraestructura',
+            },
+        }),
+        prisma.catalog.create({
+            data: {
+                type: 'PROJECT_TYPE',
+                name: 'Campaña Comercial',
+                description: 'Proyectos comerciales y de marketing',
+            },
+        }),
+        // Gerencias de venta
+        prisma.catalog.create({
+            data: {
+                type: 'SALES_MANAGEMENT',
+                name: 'Gerencia Corporativa',
+                description: 'Gerencia de ventas corporativas',
+            },
+        }),
+        prisma.catalog.create({
+            data: {
+                type: 'SALES_MANAGEMENT',
+                name: 'Gerencia Residencial',
+                description: 'Gerencia de ventas residenciales',
+            },
+        }),
+        // Ejecutivos de venta
+        prisma.catalog.create({
+            data: {
+                type: 'SALES_EXECUTIVE',
+                name: 'Carlos Mendoza',
+                description: 'Ejecutivo de ventas corporativas',
+            },
+        }),
+        prisma.catalog.create({
+            data: {
+                type: 'SALES_EXECUTIVE',
+                name: 'Ana Patricia Silva',
+                description: 'Ejecutivo de ventas residenciales',
+            },
+        }),
+        // Diseñadores
+        prisma.catalog.create({
+            data: {
+                type: 'DESIGNER',
+                name: 'Equipo Diseño Norte',
+                description: 'Equipo de diseño región norte',
+            },
+        }),
+        prisma.catalog.create({
+            data: {
+                type: 'DESIGNER',
+                name: 'Equipo Diseño Sur',
+                description: 'Equipo de diseño región sur',
+            },
+        }),
+    ]);
+
+    // 9. Crear períodos de tiempo (quincenas del año 2025)
     const periodos = [];
     for (let month = 1; month <= 12; month++) {
         // Primera quincena (1-15)

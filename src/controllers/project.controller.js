@@ -55,6 +55,8 @@ class ProjectController {
                 areaId,
                 startDate,
                 endDate,
+                // Filtro de asignaciones
+                assignedUserId,
                 // Nuevos filtros de Excel
                 mentorId,
                 coordinatorId,
@@ -76,6 +78,9 @@ class ProjectController {
             if (startDate) filters.startDate = startDate;
             if (endDate) filters.endDate = endDate;
 
+            // Filtros de asignaciones
+            if (assignedUserId) filters.assignedUserId = assignedUserId;
+
             // Filtros específicos de Excel
             if (mentorId) filters.mentorId = mentorId;
             if (coordinatorId) filters.coordinatorId = coordinatorId;
@@ -86,12 +91,22 @@ class ProjectController {
 
             const pagination = {
                 page: pageNumber,
-                limit: pageSize
+                limit: pageSize,
+                skip: (pageNumber - 1) * pageSize
             };
 
             const result = await this.projectService.getProjects(filters, pagination, req.user);
 
-            return ApiResponse.success(res, result, 'Proyectos obtenidos exitosamente');
+            // Formatear respuesta con paginación
+            const response = {
+                projects: result.projects,
+                page: pageNumber,
+                limit: pageSize,
+                total: result.total,
+                totalPages: Math.ceil(result.total / pageSize)
+            };
+
+            return ApiResponse.success(res, response, 'Proyectos obtenidos exitosamente');
         } catch (error) {
             logger.error('Error al obtener proyectos:', error);
             return ApiResponse.error(res, error.message, 400);

@@ -292,6 +292,39 @@ class UserService {
     }
 
     /**
+     * Establecer password para usuario importado (solo administradores)
+     * @param {string} userId 
+     * @param {string} newPassword 
+     * @param {Object} requestingUser 
+     * @returns {Promise<void>}
+     */
+    async setUserPassword(userId, newPassword, requestingUser) {
+        try {
+            // Solo administradores pueden establecer passwords
+            if (requestingUser.role !== USER_ROLES.ADMINISTRADOR) {
+                throw new Error('Solo los administradores pueden establecer passwords');
+            }
+
+            // Verificar que el usuario existe
+            const existingUser = await this.userRepository.findById(userId);
+            if (!existingUser) {
+                throw new Error('Usuario no encontrado');
+            }
+
+            // Hash del nuevo password
+            const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+            // Actualizar password
+            await this.userRepository.update(userId, { password: hashedPassword });
+
+            logger.info(`Password establecido para usuario: ${existingUser.email} por ${requestingUser.email}`);
+        } catch (error) {
+            logger.error('Error al establecer password:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Obtener estadísticas de usuarios
      * @returns {Promise<Object>}
      */

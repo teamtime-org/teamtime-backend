@@ -141,24 +141,19 @@ class CatalogController {
      */
     getProjectTypes = async (req, res) => {
         try {
-            const projectTypes = await prisma.excelProject.findMany({
+            const projectTypes = await prisma.catalog.findMany({
                 where: {
                     isActive: true,
-                    projectType: { isNot: null },
+                    type: 'PROJECT_TYPE',
                 },
                 select: {
-                    projectType: true,
+                    id: true,
+                    name: true,
                 },
-                distinct: ['projectType'],
-                orderBy: { projectType: 'asc' },
+                orderBy: { name: 'asc' },
             });
 
-            const types = projectTypes
-                .map(p => p.projectType)
-                .filter(type => type && type.trim() !== '')
-                .sort();
-
-            return ApiResponse.success(res, types, 'Tipos de proyecto obtenidos exitosamente');
+            return ApiResponse.success(res, projectTypes, 'Tipos de proyecto obtenidos exitosamente');
         } catch (error) {
             logger.error('Error al obtener tipos de proyecto:', error);
             return ApiResponse.error(res, error.message, 500);

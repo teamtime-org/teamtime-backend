@@ -514,12 +514,19 @@ class TaskService {
 
             const projectIds = userProjects.projects.map(p => p.id);
 
-            return {
+            const baseFilters = {
                 ...filters,
                 projectId: filters.projectId ?
                     (projectIds.includes(filters.projectId) ? filters.projectId : null) :
                     projectIds,
             };
+
+            // Si no hay filtros de área específicos, aplicar el área del usuario
+            if (!baseFilters.areaId) {
+                baseFilters.areaId = user.areaId;
+            }
+
+            return baseFilters;
         }
 
         // Colaboradores ven tareas de su área O asignadas a ellos
@@ -530,8 +537,15 @@ class TaskService {
 
             const projectIds = userProjects.projects.map(p => p.id);
 
+            const baseFilters = { ...filters };
+            
+            // Si no hay filtros de área específicos, aplicar el área del usuario
+            if (!baseFilters.areaId) {
+                baseFilters.areaId = user.areaId;
+            }
+
             return {
-                ...filters,
+                ...baseFilters,
                 // Permite ver tareas de proyectos de su área O tareas asignadas a ellos
                 OR: [
                     { projectId: { in: projectIds } },

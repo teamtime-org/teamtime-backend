@@ -293,4 +293,15 @@ router.patch('/:id/status',
     userController.toggleUserStatus
 );
 
+/**
+ * @route   PATCH /api/users/:id/password
+ * @desc    Establecer password para usuario importado
+ * @access  Private (Administrador)
+ */
+router.patch('/:id/password',
+    authenticateToken,
+    requireRole([USER_ROLES.ADMINISTRADOR]),
+    userController.setUserPassword
+);
+
 module.exports = router;

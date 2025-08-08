@@ -222,6 +222,70 @@ class TaskRepository {
             };
         }
 
+        // Filtros de proyecto
+        if (filters.areaId) {
+            where.project = {
+                ...where.project,
+                areaId: filters.areaId,
+            };
+        }
+
+        if (filters.projectStatus) {
+            where.project = {
+                ...where.project,
+                status: filters.projectStatus,
+            };
+        }
+
+        if (filters.siebelOrderNumber) {
+            where.project = {
+                ...where.project,
+                excelDetails: {
+                    siebelOrderNumber: { contains: filters.siebelOrderNumber, mode: 'insensitive' },
+                },
+            };
+        }
+
+        // Filtros de asignaciones de proyecto
+        if (filters.assignedUserId || filters.mentorId || filters.coordinatorId) {
+            const projectFilters = [];
+            
+            // Asignaciones regulares de proyecto
+            if (filters.assignedUserId) {
+                projectFilters.push({
+                    assignments: {
+                        some: {
+                            userId: filters.assignedUserId,
+                            isActive: true,
+                        },
+                    },
+                });
+            }
+            
+            // Mentores de proyectos Excel
+            if (filters.mentorId) {
+                projectFilters.push({
+                    excelDetails: {
+                        mentorId: filters.mentorId,
+                    },
+                });
+            }
+            
+            // Coordinadores de proyectos Excel
+            if (filters.coordinatorId) {
+                projectFilters.push({
+                    excelDetails: {
+                        coordinatorId: filters.coordinatorId,
+                    },
+                });
+            }
+
+            where.project = {
+                ...where.project,
+                OR: projectFilters,
+            };
+        }
+
         // Contar total
         const total = await prisma.task.count({ where });
 
@@ -240,11 +304,46 @@ class TaskRepository {
                     select: {
                         id: true,
                         name: true,
+                        status: true,
                         area: {
                             select: {
                                 id: true,
                                 name: true,
                                 color: true,
+                            },
+                        },
+                        assignments: {
+                            where: { isActive: true },
+                            include: {
+                                user: {
+                                    select: {
+                                        id: true,
+                                        firstName: true,
+                                        lastName: true,
+                                        email: true,
+                                    },
+                                },
+                            },
+                        },
+                        excelDetails: {
+                            select: {
+                                siebelOrderNumber: true,
+                                mentor: {
+                                    select: {
+                                        id: true,
+                                        firstName: true,
+                                        lastName: true,
+                                        email: true,
+                                    },
+                                },
+                                coordinator: {
+                                    select: {
+                                        id: true,
+                                        firstName: true,
+                                        lastName: true,
+                                        email: true,
+                                    },
+                                },
                             },
                         },
                     },
