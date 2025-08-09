@@ -228,10 +228,13 @@ class ExcelImportService {
             throw new Error(`Usuario con ID ${requestingUser.userId} no existe en la base de datos. Email del token: ${requestingUser.email}`);
         }
 
-        // Guardar el usuario solicitante para usar en saveProject
+        // Guardar el usuario solicitante y areaId para usar en saveProject y creación de usuarios
         this.requestingUser = requestingUser;
+        this.projectAreaId = areaId;
 
-        logger.info(`Procesando datos con usuario: ${requestingUser.email} (ID: ${requestingUser.userId})`);        // Crear un cache de usuarios para evitar duplicados
+        logger.info(`Procesando datos con usuario: ${requestingUser.email} (ID: ${requestingUser.userId}) - Área del proyecto: ${areaId}`);
+        
+        // Crear un cache de usuarios para evitar duplicados
         this.userCache = new Map();
         this.emailCounter = new Map(); // Cache para contadores de emails
 
@@ -1154,6 +1157,20 @@ class ExcelImportService {
         if (user) {
             logger.info(`    Usuario encontrado en BD: ${user.id} - ${user.email}`);
             
+            // Si el usuario existe pero no tiene área asignada, asignarle el área del proyecto
+            if (!user.areaId && this.projectAreaId) {
+                try {
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: { areaId: this.projectAreaId }
+                    });
+                    logger.info(`    Área asignada al usuario existente: ${user.email} -> Área: ${this.projectAreaId}`);
+                    user.areaId = this.projectAreaId; // Actualizar objeto local
+                } catch (error) {
+                    logger.warn(`    No se pudo asignar área a usuario ${user.id}: ${error.message}`);
+                }
+            }
+            
             // Verificar si necesita actualizar email (si está usando email genérico importado)
             if (user.email.includes('@imported.com')) {
                 // Generar email más específico usando el proyecto actual
@@ -1208,11 +1225,12 @@ class ExcelImportService {
                         firstName,
                         lastName,
                         role: defaultRole,
+                        areaId: this.projectAreaId, // Asignar al área del proyecto
                         isActive: true
                     }
                 });
 
-                logger.info(`Usuario creado secuencialmente: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email}`);
+                logger.info(`Usuario creado secuencialmente: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email} - Área: ${this.projectAreaId}`);
             } catch (error) {
                 // Si aún hay error de duplicado, usar timestamp
                 if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
@@ -1227,11 +1245,12 @@ class ExcelImportService {
                             firstName,
                             lastName,
                             role: defaultRole,
+                            areaId: this.projectAreaId, // Asignar al área del proyecto
                             isActive: true
                         }
                     });
 
-                    logger.info(`Usuario creado con timestamp: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email}`);
+                    logger.info(`Usuario creado con timestamp: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email} - Área: ${this.projectAreaId}`);
                 } else {
                     throw error;
                 }

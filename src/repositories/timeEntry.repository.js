@@ -465,9 +465,22 @@ class TimeEntryRepository {
      * @returns {Promise<Object>}
      */
     async checkDailyHoursLimit(userId, date, newHours, excludeId = null) {
+        // Normalizar la fecha para asegurar que sea en formato YYYY-MM-DD
+        let normalizedDate;
+        if (typeof date === 'string') {
+            // Si es string, convertir a Date y luego a ISO string solo fecha
+            normalizedDate = new Date(date + 'T00:00:00.000Z').toISOString().split('T')[0];
+        } else if (date instanceof Date) {
+            // Si es Date, convertir a ISO string solo fecha
+            normalizedDate = date.toISOString().split('T')[0];
+        } else {
+            // Fallback
+            normalizedDate = new Date(date).toISOString().split('T')[0];
+        }
+
         const where = {
             userId,
-            date,
+            date: new Date(normalizedDate + 'T00:00:00.000Z'), // Crear DateTime desde la fecha
         };
 
         if (excludeId) {
@@ -479,12 +492,13 @@ class TimeEntryRepository {
             _sum: { hours: true },
         });
 
-        const currentHours = result._sum.hours || 0;
-        const totalHours = currentHours + newHours;
+        const currentHours = parseFloat(result._sum.hours || 0);
+        const newHoursFloat = parseFloat(newHours);
+        const totalHours = currentHours + newHoursFloat;
 
         return {
             currentHours,
-            newHours,
+            newHours: newHoursFloat,
             totalHours,
             isValid: totalHours <= 24,
         };

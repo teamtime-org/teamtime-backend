@@ -424,7 +424,7 @@ class TaskService {
 
         // Colaboradores pueden actualizar tareas asignadas a ellos
         if (user.role === USER_ROLES.COLABORADOR) {
-            return task.assignedTo === user.id;
+            return task.assignedTo === user.userId;
         }
 
         return false;
@@ -449,7 +449,7 @@ class TaskService {
 
         // Colaboradores pueden cambiar estado de tareas asignadas a ellos
         if (user.role === USER_ROLES.COLABORADOR) {
-            return task.assignedTo === user.id;
+            return task.assignedTo === user.userId;
         }
 
         return false;
@@ -501,9 +501,42 @@ class TaskService {
      * @returns {Promise<Object>}
      */
     async applyUserFilters(filters, user) {
+        const appliedFilters = { ...filters };
+
+        // Si se solicita filtrar por tareas asignadas directamente al usuario
+        if (filters.assigned === true || filters.assigned === 'true') {
+            appliedFilters.assignedTo = user.userId;
+            // Remover el flag assigned para no interferir con otros filtros
+            delete appliedFilters.assigned;
+            logger.info(`User ${user.email} requesting assigned tasks only`);
+            return appliedFilters;
+        }
+
+        // Si se solicita filtrar por tareas de proyectos asignados al usuario
+        if (filters.assignedProjects === true || filters.assignedProjects === 'true') {
+            // Obtener proyectos asignados al usuario
+            const userProjects = await this.projectRepository.findMany({
+                assignedToMe: true
+            }, { limit: 1000 }, user.role, user.userId);
+
+            const assignedProjectIds = userProjects.projects.map(p => p.id);
+            
+            if (assignedProjectIds.length === 0) {
+                // Si no hay proyectos asignados, retornar filtro que no traiga nada
+                appliedFilters.projectId = 'no-projects-assigned';
+            } else {
+                appliedFilters.projectId = { in: assignedProjectIds };
+            }
+            
+            // Remover el flag assignedProjects para no interferir con otros filtros
+            delete appliedFilters.assignedProjects;
+            logger.info(`User ${user.email} requesting tasks from assigned projects: ${assignedProjectIds.join(', ')}`);
+            return appliedFilters;
+        }
+
         // Administradores ven todas las tareas
         if (user.role === USER_ROLES.ADMINISTRADOR) {
-            return filters;
+            return appliedFilters;
         }
 
         // Coordinadores ven tareas de proyectos de su área
@@ -515,9 +548,9 @@ class TaskService {
             const projectIds = userProjects.projects.map(p => p.id);
 
             const baseFilters = {
-                ...filters,
-                projectId: filters.projectId ?
-                    (projectIds.includes(filters.projectId) ? filters.projectId : null) :
+                ...appliedFilters,
+                projectId: appliedFilters.projectId ?
+                    (projectIds.includes(appliedFilters.projectId) ? appliedFilters.projectId : null) :
                     projectIds,
             };
 
@@ -529,32 +562,29 @@ class TaskService {
             return baseFilters;
         }
 
-        // Colaboradores ven tareas de su área O asignadas a ellos
+        // Colaboradores solo ven tareas de proyectos asignados a ellos O tareas asignadas directamente a ellos
         if (user.role === USER_ROLES.COLABORADOR) {
-            const userProjects = await this.projectRepository.findMany({
-                areaId: user.areaId
-            }, { page: 1, limit: 1000 });
-
-            const projectIds = userProjects.projects.map(p => p.id);
-
-            const baseFilters = { ...filters };
+            logger.info(`Collaborator ${user.email} - loading tasks from assigned projects only`);
             
-            // Si no hay filtros de área específicos, aplicar el área del usuario
-            if (!baseFilters.areaId) {
-                baseFilters.areaId = user.areaId;
-            }
+            // Obtener proyectos específicamente asignados al usuario
+            const assignedProjects = await this.projectRepository.findMany({
+                assignedToMe: true
+            }, { page: 1, limit: 1000 }, user.role, user.userId);
+            const projectIds = assignedProjects.projects.map(p => p.id);
+
+            const baseFilters = { ...appliedFilters };
 
             return {
                 ...baseFilters,
                 // Permite ver tareas de proyectos de su área O tareas asignadas a ellos
                 OR: [
                     { projectId: { in: projectIds } },
-                    { assignedTo: user.id }
+                    { assignedTo: user.userId }
                 ]
             };
         }
 
-        return filters;
+        return appliedFilters;
     }
 
     /**

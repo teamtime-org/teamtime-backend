@@ -57,6 +57,7 @@ class ProjectController {
                 endDate,
                 // Filtro de asignaciones
                 assignedUserId,
+                assigned,
                 // Nuevos filtros de Excel
                 mentorId,
                 coordinatorId,
@@ -80,6 +81,7 @@ class ProjectController {
 
             // Filtros de asignaciones
             if (assignedUserId) filters.assignedUserId = assignedUserId;
+            if (assigned === 'true' || assigned === true) filters.assigned = true;
 
             // Filtros específicos de Excel
             if (mentorId) filters.mentorId = mentorId;

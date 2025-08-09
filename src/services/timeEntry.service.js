@@ -3,6 +3,7 @@ const TaskRepository = require('../repositories/task.repository');
 const { USER_ROLES, LIMITS, ERROR_MESSAGES } = require('../utils/constants');
 const { isSameDay, startOfDay, endOfDay } = require('../utils/dateUtils');
 const logger = require('../utils/logger');
+const prisma = require('../config/database');
 
 /**
  * Servicio para gestión de registros de tiempo
@@ -21,14 +22,58 @@ class TimeEntryService {
      */
     async createTimeEntry(timeEntryData, requestingUser) {
         try {
-            // Verificar que la tarea existe
-            const task = await this.taskRepository.findById(timeEntryData.taskId);
+            // Verificar que la tarea existe o es una tarea general
+            let task = await this.taskRepository.findById(timeEntryData.taskId);
+            
+            // Si la tarea no existe pero es una tarea general, intentar crearla
+            if (!task && timeEntryData.taskId?.startsWith('general-')) {
+                const projectId = timeEntryData.taskId.replace('general-', '');
+                logger.debug(`Intentando crear tarea general para proyecto: ${projectId}`);
+                
+                try {
+                    // Verificar que el proyecto existe y obtener información del área
+                    const project = await prisma.project.findFirst({
+                        where: { id: projectId },
+                        include: {
+                            area: true
+                        }
+                    });
+                    
+                    if (!project) {
+                        throw new Error('Proyecto no encontrado para tarea general');
+                    }
+                    
+                    // Crear la tarea general
+                    const generalTaskData = {
+                        id: timeEntryData.taskId,
+                        title: 'Trabajo general del proyecto',
+                        description: `Tiempo de trabajo general en el proyecto ${project.name}`,
+                        projectId: projectId,
+                        priority: 'MEDIUM',
+                        status: 'IN_PROGRESS',
+                        assignedTo: requestingUser.userId, // Asignar al usuario que está creando el registro
+                        createdBy: requestingUser.userId,
+                        isActive: true,
+                        estimatedHours: null
+                    };
+                    
+                    task = await this.taskRepository.create(generalTaskData);
+                    logger.info(`Tarea general creada: ${task.id} para proyecto ${project.name}`);
+                } catch (error) {
+                    logger.error(`Error creando tarea general:`, error);
+                    throw new Error('Error al crear tarea general: ' + error.message);
+                }
+            }
+            
             if (!task) {
                 throw new Error('Tarea no encontrada');
             }
 
             // Verificar permisos
-            if (!this.canUserCreateTimeEntry(requestingUser, task, timeEntryData.userId)) {
+            const targetUserId = timeEntryData.userId || requestingUser.userId;
+            
+            if (!this.canUserCreateTimeEntry(requestingUser, task, targetUserId)) {
+                logger.warn(`Permisos insuficientes para crear time entry - Usuario: ${requestingUser.email}, Tarea: ${task.id}`);
                 throw new Error(ERROR_MESSAGES.FORBIDDEN);
             }
 
@@ -371,14 +416,23 @@ class TimeEntryService {
         // Coordinadores pueden crear registros para usuarios de su área
         if (user.role === USER_ROLES.COORDINADOR) {
             // Verificar que la tarea pertenece a un proyecto de su área
-            return user.areaId === task.project.areaId;
+            return user.areaId === task.project?.areaId;
         }
 
         // Colaboradores solo pueden crear registros para sí mismos
         if (user.role === USER_ROLES.COLABORADOR) {
             // Pueden crear registros para tareas de su área O asignadas a ellos
-            return user.id === targetUserId &&
-                (user.areaId === task.project.areaId || task.assignedTo === user.id);
+            const isSameUser = user.userId === targetUserId;
+            const isSameArea = user.areaId && user.areaId === task.project?.areaId;
+            const isAssignedToUser = task.assignedTo === user.userId;
+            
+            // Si no tienen área asignada, solo pueden trabajar en tareas asignadas específicamente a ellos
+            if (!user.areaId) {
+                return isSameUser && isAssignedToUser;
+            }
+            
+            // Si tienen área asignada, pueden trabajar en tareas de su área O asignadas a ellos
+            return isSameUser && (isSameArea || isAssignedToUser);
         }
 
         return false;
@@ -446,7 +500,7 @@ class TimeEntryService {
         }
 
         // Colaboradores solo pueden eliminar sus propios registros
-        return user.id === timeEntry.userId;
+        return user.userId === timeEntry.userId;
     }
 
     /**
@@ -469,7 +523,7 @@ class TimeEntryService {
         }
 
         // Colaboradores solo pueden ver sus propios registros
-        return user.id === targetUserId;
+        return user.userId === targetUserId;
     }
 
     /**
@@ -495,7 +549,7 @@ class TimeEntryService {
         // Colaboradores solo ven sus propios registros
         return {
             ...filters,
-            userId: user.id,
+            userId: user.userId,
         };
     }
 }

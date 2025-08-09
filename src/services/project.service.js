@@ -395,18 +395,37 @@ class ProjectService {
      * @returns {Object}
      */
     applyUserFilters(filters, user) {
+        const appliedFilters = { ...filters };
+
+        // Si se solicita filtrar por proyectos asignados
+        if (filters.assigned === true || filters.assigned === 'true') {
+            appliedFilters.assignedToMe = true;
+            logger.info(`User ${user.email} requesting assigned projects only`);
+        }
+
         // Administradores ven todos los proyectos
         if (user.role === USER_ROLES.ADMINISTRADOR) {
             logger.info(`Admin user ${user.email} accessing all projects`);
-            return filters;
+            return appliedFilters;
         }
 
-        // Otros roles solo ven proyectos de su área
-        logger.info(`User ${user.email} (role: ${user.role}) filtering projects by areaId: ${user.areaId}`);
-        return {
-            ...filters,
-            areaId: user.areaId,
-        };
+        // Colaboradores solo ven proyectos asignados específicamente a ellos
+        if (user.role === USER_ROLES.COLABORADOR) {
+            logger.info(`Collaborator ${user.email} - limiting to assigned projects only`);
+            appliedFilters.assignedToMe = true;
+        } else {
+            // Coordinadores ven proyectos de su área
+            if (user.areaId) {
+                logger.info(`User ${user.email} (role: ${user.role}) filtering projects by areaId: ${user.areaId}`);
+                appliedFilters.areaId = user.areaId;
+            } else {
+                // Si no tienen área, no pueden ver ningún proyecto (excepto los asignados específicamente)
+                logger.warn(`User ${user.email} (role: ${user.role}) has no area assigned - limiting to assigned projects only`);
+                appliedFilters.assignedToMe = true;
+            }
+        }
+        
+        return appliedFilters;
     }
 
     /**
