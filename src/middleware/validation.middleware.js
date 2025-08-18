@@ -8,14 +8,35 @@ const logger = require('../utils/logger');
  * @param {string} source - Fuente de datos ('body', 'query', 'params')
  */
 const validate = (schema, source = 'body') => {
-    return (req, res, next) => {
+    return async (req, res, next) => {
         try {
             const data = req[source];
-            const { error, value } = schema.validate(data, {
-                abortEarly: false, // Retornar todos los errores
-                stripUnknown: true, // Remover campos no definidos en el schema
-                convert: true, // Convertir tipos automáticamente
-            });
+            
+            // Intentar primero con validateAsync, y si falla usar validate
+            let error, value;
+            try {
+                const result = await schema.validateAsync(data, {
+                    abortEarly: false, // Retornar todos los errores
+                    stripUnknown: true, // Remover campos no definidos en el schema
+                    convert: true, // Convertir tipos automáticamente
+                });
+                value = result;
+                error = null;
+            } catch (asyncError) {
+                if (asyncError.isJoi) {
+                    error = asyncError;
+                    value = asyncError.value;
+                } else {
+                    // Si no es un error de validación de Joi, intentar con validate síncrono
+                    const syncResult = schema.validate(data, {
+                        abortEarly: false, // Retornar todos los errores
+                        stripUnknown: true, // Remover campos no definidos en el schema
+                        convert: true, // Convertir tipos automáticamente
+                    });
+                    error = syncResult.error;
+                    value = syncResult.value;
+                }
+            }
 
             if (error) {
                 const errors = error.details.map(detail => ({
@@ -24,6 +45,8 @@ const validate = (schema, source = 'body') => {
                     value: detail.context?.value,
                 }));
 
+                logger.error('[Validation] Request body:', JSON.stringify(data, null, 2));
+                logger.error('[Validation] Validation errors:', errors);
                 logger.warn('Error de validación', {
                     source,
                     errors,

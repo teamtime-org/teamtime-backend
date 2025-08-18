@@ -362,12 +362,17 @@ class TimeEntryService {
             throw new Error(`No se pueden registrar más de ${LIMITS.MAX_HOURS_PER_DAY} horas en un día`);
         }
 
-        // Verificar que la fecha no sea futura
+        // Verificar que la fecha no exceda los días futuros permitidos
+        const SystemConfigService = require('./systemConfig.service');
+        const systemConfigService = new SystemConfigService();
+        const futureDaysAllowed = await systemConfigService.getFutureDaysAllowed();
+        
         const today = new Date();
         const entryDate = new Date(timeEntryData.date);
+        const maxAllowedDate = new Date(today.getTime() + futureDaysAllowed * 24 * 60 * 60 * 1000);
 
-        if (entryDate > today) {
-            throw new Error('No se pueden registrar horas en fechas futuras');
+        if (entryDate > maxAllowedDate) {
+            throw new Error(`No se pueden registrar horas más de ${futureDaysAllowed} días en el futuro`);
         }
 
         // Verificar duplicados (userId, projectId, taskId, date) - solo si no se debe omitir

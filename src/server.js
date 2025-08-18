@@ -10,6 +10,7 @@ const routes = require('./routes');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const logger = require('./utils/logger');
 const { specs, swaggerUi, swaggerUiOptions } = require('./config/swagger');
+const SystemConfigService = require('./services/systemConfig.service');
 
 /**
  * Crear aplicación Express
@@ -232,19 +233,50 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 /**
+ * Inicializar configuraciones del sistema
+ */
+const initializeSystemConfigs = async () => {
+    try {
+        const systemConfigService = new SystemConfigService();
+        
+        // Buscar un usuario administrador para inicializar configuraciones
+        const { PrismaClient } = require('@prisma/client');
+        const prisma = new PrismaClient();
+        
+        const adminUser = await prisma.user.findFirst({
+            where: { role: 'ADMINISTRADOR' }
+        });
+        
+        if (adminUser) {
+            await systemConfigService.initializeDefaultConfigs(adminUser.id);
+            logger.info('Configuraciones del sistema inicializadas');
+        } else {
+            logger.warn('No se encontró usuario administrador para inicializar configuraciones');
+        }
+        
+        await prisma.$disconnect();
+    } catch (error) {
+        logger.error('Error al inicializar configuraciones del sistema:', error);
+    }
+};
+
+/**
  * Función para iniciar el servidor
  */
 const startServer = async () => {
     try {
         const PORT = config.PORT || 3000;
 
-        app.listen(PORT, () => {
+        app.listen(PORT, async () => {
             logger.info(`🚀 Servidor iniciado en puerto ${PORT}`);
             logger.info(`📝 Ambiente: ${config.NODE_ENV}`);
             logger.info(`🔗 API disponible en: http://localhost:${PORT}/api`);
             logger.info(`� Documentación Swagger: http://localhost:${PORT}/api/docs`);
             logger.info(`� OpenAPI JSON: http://localhost:${PORT}/api/docs.json`);
             logger.info(`💾 Base de datos: PostgreSQL`);
+            
+            // Inicializar configuraciones del sistema después de que el servidor esté listo
+            await initializeSystemConfigs();
         });
     } catch (error) {
         logger.error('Error al iniciar el servidor:', error);

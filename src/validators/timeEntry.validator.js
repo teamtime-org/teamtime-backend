@@ -1,5 +1,6 @@
 const Joi = require('joi');
 const { LIMITS } = require('../utils/constants');
+const SystemConfigService = require('../services/systemConfig.service');
 
 /**
  * Esquemas de validación para registros de tiempo
@@ -16,19 +17,34 @@ const createTimeEntrySchema = Joi.object({
         }),
 
     taskId: Joi.string()
-        .uuid()
+        .custom((value, helpers) => {
+            // Permitir UUIDs normales o tareas generales con formato "general-{uuid}"
+            if (value.startsWith('general-')) {
+                const projectId = value.replace('general-', '');
+                // Verificar que la parte después de "general-" sea un UUID válido
+                if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)) {
+                    return helpers.error('any.invalid');
+                }
+            } else {
+                // Verificar que sea un UUID válido
+                if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+                    return helpers.error('any.invalid');
+                }
+            }
+            return value;
+        })
         .messages({
-            'string.uuid': 'El ID de la tarea debe ser un UUID válido',
+            'any.invalid': 'El ID de la tarea debe ser un UUID válido o una tarea general con formato "general-{uuid}"',
         }),
 
     date: Joi.date()
         .iso()
-        .max('now')
+        .max(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)) // Máximo 30 días por ahora
         .required()
         .messages({
             'date.base': 'La fecha debe ser una fecha válida',
             'date.format': 'La fecha debe estar en formato ISO (YYYY-MM-DD)',
-            'date.max': 'La fecha no puede ser futura',
+            'date.max': 'La fecha no puede ser más de 30 días en el futuro',
             'any.required': 'La fecha es requerida',
         }),
 

@@ -16,6 +16,7 @@ class TimeEntryController {
      */
     createTimeEntry = async (req, res) => {
         try {
+            logger.info(`[TimeEntry Creation] User: ${req.user?.email || 'unknown'}, Body: ${JSON.stringify(req.body)}`);
             
             const timeEntry = await this.timeEntryService.createTimeEntry(req.body, req.user);
 
