@@ -84,7 +84,7 @@ app.use(session({
  */
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 200, // límite de 100 requests por ventana por IP
+    max: 2000, // límite de 2000 requests por ventana por IP
     message: {
         success: false,
         message: 'Demasiadas peticiones desde esta IP, intenta de nuevo más tarde.'
@@ -238,22 +238,22 @@ process.on('unhandledRejection', (reason, promise) => {
 const initializeSystemConfigs = async () => {
     try {
         const systemConfigService = new SystemConfigService();
-        
+
         // Buscar un usuario administrador para inicializar configuraciones
         const { PrismaClient } = require('@prisma/client');
         const prisma = new PrismaClient();
-        
+
         const adminUser = await prisma.user.findFirst({
             where: { role: 'ADMINISTRADOR' }
         });
-        
+
         if (adminUser) {
             await systemConfigService.initializeDefaultConfigs(adminUser.id);
             logger.info('Configuraciones del sistema inicializadas');
         } else {
             logger.warn('No se encontró usuario administrador para inicializar configuraciones');
         }
-        
+
         await prisma.$disconnect();
     } catch (error) {
         logger.error('Error al inicializar configuraciones del sistema:', error);
@@ -274,7 +274,7 @@ const startServer = async () => {
             logger.info(`� Documentación Swagger: http://localhost:${PORT}/api/docs`);
             logger.info(`� OpenAPI JSON: http://localhost:${PORT}/api/docs.json`);
             logger.info(`💾 Base de datos: PostgreSQL`);
-            
+
             // Inicializar configuraciones del sistema después de que el servidor esté listo
             await initializeSystemConfigs();
         });
