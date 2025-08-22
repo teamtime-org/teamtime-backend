@@ -84,7 +84,7 @@ app.use(session({
  */
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
-    max: 2000, // límite de 2000 requests por ventana por IP
+    max: 2500, // límite de 2500 requests por ventana por IP
     message: {
         success: false,
         message: 'Demasiadas peticiones desde esta IP, intenta de nuevo más tarde.'

@@ -26,14 +26,6 @@ class TaskRepository {
                     },
                 },
             },
-            assignee: {
-                select: {
-                    id: true,
-                    firstName: true,
-                    lastName: true,
-                    email: true,
-                },
-            },
             creator: {
                 select: {
                     id: true,
@@ -91,13 +83,6 @@ class TaskRepository {
                         },
                     },
                 },
-                assignee: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                    },
-                },
                 creator: {
                     select: {
                         id: true,
@@ -126,13 +111,6 @@ class TaskRepository {
                         name: true,
                     },
                 },
-                assignee: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                    },
-                },
             },
         });
     }
@@ -155,20 +133,15 @@ class TaskRepository {
                 createdBy: userId,
             };
         } else if (userRole === 'COLABORADOR') {
-            // Los colaboradores ven tareas de proyectos asignados o tareas asignadas a ellos
-            where.OR = [
-                { assignedTo: userId },
-                {
-                    project: {
-                        assignments: {
-                            some: {
-                                userId,
-                                isActive: true,
-                            },
-                        },
+            // Los colaboradores ven tareas de proyectos asignados a ellos
+            where.project = {
+                assignments: {
+                    some: {
+                        userId,
+                        isActive: true,
                     },
                 },
-            ];
+            };
         }
 
         // Aplicar filtros adicionales
@@ -177,20 +150,18 @@ class TaskRepository {
         }
 
         if (filters.status) {
-            where.status = filters.status;
+            where.project = {
+                ...where.project,
+                status: filters.status
+            };
         }
 
         if (filters.priority) {
             where.priority = filters.priority;
         }
 
-        if (filters.assignedTo) {
-            where.assignedTo = filters.assignedTo;
-        }
-
-        if (filters.assignedToMe && userId) {
-            where.assignedTo = userId;
-        }
+        // Los filtros de asignación de tareas ya no son relevantes
+        // Los usuarios se asignan a proyectos, no a tareas individuales
 
         if (filters.createdBy) {
             where.createdBy = filters.createdBy;
@@ -217,9 +188,8 @@ class TaskRepository {
             where.dueDate = {
                 lt: new Date(),
             };
-            where.status = {
-                not: 'DONE',
-            };
+            // Las tareas vencidas se filtran por fecha, no por status
+            // El status se maneja a nivel de proyecto
         }
 
         // Filtros de proyecto
@@ -348,13 +318,6 @@ class TaskRepository {
                         },
                     },
                 },
-                assignee: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                    },
-                },
                 creator: {
                     select: {
                         id: true,
@@ -383,23 +346,17 @@ class TaskRepository {
         const where = { projectId, isActive: true };
 
         if (filters.status) {
-            where.status = filters.status;
+            where.project = {
+                ...where.project,
+                status: filters.status
+            };
         }
 
-        if (filters.assignedTo) {
-            where.assignedTo = filters.assignedTo;
-        }
+        // Las tareas ya no tienen asignación individual
 
         return await prisma.task.findMany({
             where,
             include: {
-                assignee: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                    },
-                },
             },
             orderBy: [
                 { priority: 'desc' },
@@ -409,16 +366,29 @@ class TaskRepository {
     }
 
     /**
-     * Obtener tareas asignadas al usuario
+     * Obtener tareas de proyectos asignados al usuario
      * @param {string} userId 
      * @param {Object} filters 
      * @returns {Promise<Array>}
      */
     async findByAssignee(userId, filters = {}) {
-        const where = { assignedTo: userId, isActive: true };
+        const where = { 
+            isActive: true,
+            project: {
+                assignments: {
+                    some: {
+                        userId,
+                        isActive: true,
+                    },
+                },
+            },
+        };
 
         if (filters.status) {
-            where.status = filters.status;
+            where.project = {
+                ...where.project,
+                status: filters.status
+            };
         }
 
         if (filters.projectId) {
@@ -463,7 +433,6 @@ class TaskRepository {
         const task = await prisma.task.findUnique({
             where: { id: taskId },
             select: {
-                assignedTo: true,
                 createdBy: true,
                 project: {
                     select: {
@@ -488,33 +457,18 @@ class TaskRepository {
             return task.project.createdBy === userId || task.createdBy === userId;
         }
 
-        // Los colaboradores pueden acceder a tareas asignadas o de proyectos asignados
-        return task.assignedTo === userId ||
-            task.createdBy === userId ||
+        // Los colaboradores pueden acceder a tareas de proyectos asignados
+        return task.createdBy === userId ||
             task.project.assignments.length > 0;
     }
 
     /**
-     * Asignar tarea a usuario
-     * @param {string} taskId 
-     * @param {string} userId 
-     * @returns {Promise<Object>}
+     * Las tareas ya no se asignan individualmente
+     * Los usuarios se asignan a proyectos completos
+     * @deprecated - Usar ProjectRepository.assignUserToProject en su lugar
      */
     async assignToUser(taskId, userId) {
-        return await prisma.task.update({
-            where: { id: taskId },
-            data: { assignedTo: userId },
-            include: {
-                assignee: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                        email: true,
-                    },
-                },
-            },
-        });
+        throw new Error('Las tareas ya no se asignan individualmente. Los usuarios se asignan a proyectos completos.');
     }
 
     /**
@@ -570,14 +524,20 @@ class TaskRepository {
             dueDate: {
                 lt: new Date(),
             },
-            status: {
-                not: 'DONE',
-            },
             isActive: true,
+            // Status se maneja a nivel de proyecto, no de tarea
         };
 
         if (userId) {
-            where.assignedTo = userId;
+            // Filtrar por tareas de proyectos asignados al usuario
+            where.project = {
+                assignments: {
+                    some: {
+                        userId,
+                        isActive: true,
+                    },
+                },
+            };
         }
 
         return await prisma.task.findMany({
@@ -593,13 +553,6 @@ class TaskRepository {
                                 color: true,
                             },
                         },
-                    },
-                },
-                assignee: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
                     },
                 },
             },
@@ -631,6 +584,34 @@ class TaskRepository {
     }
 
     /**
+     * Obtener tareas de un proyecto (simple)
+     * @param {string} projectId 
+     * @returns {Promise<Array>}
+     */
+    async getTasksByProject(projectId) {
+        return await prisma.task.findMany({
+            where: {
+                projectId,
+                isActive: true,
+            },
+            select: {
+                id: true,
+                title: true,
+                description: true,
+                status: true,
+                priority: true,
+                createdAt: true,
+                dueDate: true,
+                estimatedHours: true,
+            },
+            orderBy: [
+                { order: 'asc' },
+                { createdAt: 'asc' },
+            ],
+        });
+    }
+
+    /**
      * Obtener estadísticas generales de tareas
      * @param {Object} filters 
      * @returns {Promise<Object>}
@@ -643,7 +624,15 @@ class TaskRepository {
         }
 
         if (filters.userId) {
-            where.assignedTo = filters.userId;
+            // Filtrar por tareas de proyectos asignados al usuario
+            where.project = {
+                assignments: {
+                    some: {
+                        userId: filters.userId,
+                        isActive: true,
+                    },
+                },
+            };
         }
 
         const [
@@ -667,7 +656,7 @@ class TaskRepository {
                 where: {
                     ...where,
                     dueDate: { lt: new Date() },
-                    status: { not: 'DONE' },
+                    // Status se maneja a nivel de proyecto, no de tarea
                 },
             }),
         ]);

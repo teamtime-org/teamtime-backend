@@ -93,6 +93,28 @@ const DATE_FORMATS = {
     DISPLAY_DATETIME: 'DD/MM/YYYY HH:mm',
 };
 
+// Tareas estándar para proyectos
+const STANDARD_PROJECT_TASKS = [
+    'Inicio',
+    'Planeación',
+    'Ejecución',
+    'Monitoreo',
+    'Cierre'
+];
+
+// Tareas para proyecto general del área
+const GENERAL_PROJECT_TASKS = [
+    'Organización',
+    'Mejora continua',
+    'SmartCampus',
+    'Certificación',
+    'Mentoría',
+    'Preventa'
+];
+
+// Prefijo para proyecto general
+const GENERAL_PROJECT_PREFIX = 'Actividades generales del área';
+
 module.exports = {
     USER_ROLES,
     PROJECT_STATUS,
@@ -103,4 +125,7 @@ module.exports = {
     SUCCESS_MESSAGES,
     PAGINATION,
     DATE_FORMATS,
+    STANDARD_PROJECT_TASKS,
+    GENERAL_PROJECT_TASKS,
+    GENERAL_PROJECT_PREFIX,
 };

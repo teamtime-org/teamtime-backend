@@ -218,7 +218,30 @@ class ProjectRepository {
             where.createdBy = filters.createdBy;
         }
 
-        if (filters.assignedToMe && userId) {
+        if (filters.isGeneral !== undefined) {
+            where.isGeneral = filters.isGeneral;
+        }
+
+        // Lógica especial para colaboradores: proyectos asignados + proyectos generales del área
+        if (filters.collaboratorAccess && filters.collaboratorUserId && filters.collaboratorAreaId) {
+            console.log(`ProjectRepository.findMany - Applying collaborator access for user ${filters.collaboratorUserId} in area ${filters.collaboratorAreaId}`);
+            where.OR = [
+                // Proyectos asignados específicamente al colaborador
+                {
+                    assignments: {
+                        some: {
+                            userId: filters.collaboratorUserId,
+                            isActive: true,
+                        },
+                    },
+                },
+                // Proyectos generales del área del colaborador
+                {
+                    isGeneral: true,
+                    areaId: filters.collaboratorAreaId,
+                },
+            ];
+        } else if (filters.assignedToMe && userId) {
             where.assignments = {
                 some: {
                     userId,
@@ -670,6 +693,104 @@ class ProjectRepository {
         return await prisma.project.update({
             where: { id },
             data: { isActive: false },
+        });
+    }
+
+    /**
+     * Buscar proyecto general por área
+     * @param {string} areaId 
+     * @returns {Promise<Object|null>}
+     */
+    async findGeneralProjectByArea(areaId) {
+        return await prisma.project.findFirst({
+            where: {
+                areaId,
+                isGeneral: true,
+                isActive: true,
+            },
+            include: {
+                area: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
+                tasks: {
+                    where: {
+                        isActive: true,
+                    },
+                    select: {
+                        id: true,
+                        title: true,
+                        description: true,
+                        status: true,
+                        priority: true,
+                    },
+                },
+                assignments: {
+                    where: {
+                        isActive: true,
+                    },
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                firstName: true,
+                                lastName: true,
+                                email: true,
+                                role: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    /**
+     * Asignar usuario a proyecto
+     * @param {string} projectId 
+     * @param {string} userId 
+     * @returns {Promise<Object>}
+     */
+    async assignUserToProject(projectId, userId) {
+        // Verificar si ya está asignado
+        const existingAssignment = await prisma.projectAssignment.findFirst({
+            where: {
+                projectId,
+                userId,
+                isActive: true,
+            },
+        });
+
+        if (existingAssignment) {
+            throw new Error('El usuario ya está asignado a este proyecto');
+        }
+
+        return await prisma.projectAssignment.create({
+            data: {
+                projectId,
+                userId,
+                assignedAt: new Date(),
+                isActive: true,
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                        role: true,
+                    },
+                },
+                project: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
+            },
         });
     }
 }
