@@ -191,11 +191,6 @@ class ProjectRepository {
         const where = {};
 
         // Aplicar filtros de acceso por rol
-        // Los coordinadores y colaboradores ven proyectos de su área
-        // La lógica de área se maneja en los filtros adicionales (filters.areaId)
-        // No se aplican restricciones adicionales por rol aquí
-        // Los administradores pueden ver todos los proyectos
-
         console.log('ProjectRepository.findMany - filters:', filters);
         console.log('ProjectRepository.findMany - userRole:', userRole);
         console.log('ProjectRepository.findMany - userId:', userId);

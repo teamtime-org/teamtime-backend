@@ -1,7 +1,8 @@
 const TimeEntryRepository = require('../repositories/timeEntry.repository');
 const TaskRepository = require('../repositories/task.repository');
+const SystemConfigService = require('./systemConfig.service');
 const { USER_ROLES, LIMITS, ERROR_MESSAGES } = require('../utils/constants');
-const { isSameDay, startOfDay, endOfDay } = require('../utils/dateUtils');
+const { isSameDay, startOfDay, endOfDay, parseDateOnly, formatDateOnly, formatForLog } = require('../utils/dateUtils');
 const logger = require('../utils/logger');
 const prisma = require('../config/database');
 
@@ -12,6 +13,7 @@ class TimeEntryService {
     constructor() {
         this.timeEntryRepository = new TimeEntryRepository();
         this.taskRepository = new TaskRepository();
+        this.systemConfigService = new SystemConfigService();
     }
 
     /**
@@ -24,64 +26,34 @@ class TimeEntryService {
         try {
             // Verificar que la tarea existe o es una tarea general
             let task = await this.taskRepository.findById(timeEntryData.taskId);
-            
-            // Si la tarea no existe pero es una tarea general, intentar crearla
-            if (!task && timeEntryData.taskId?.startsWith('general-')) {
-                const projectId = timeEntryData.taskId.replace('general-', '');
-                logger.debug(`Intentando crear tarea general para proyecto: ${projectId}`);
-                
-                try {
-                    // Verificar que el proyecto existe y obtener información del área
-                    const project = await prisma.project.findFirst({
-                        where: { id: projectId },
-                        include: {
-                            area: true
-                        }
-                    });
-                    
-                    if (!project) {
-                        throw new Error('Proyecto no encontrado para tarea general');
-                    }
-                    
-                    // Crear la tarea general
-                    const generalTaskData = {
-                        id: timeEntryData.taskId,
-                        title: 'Trabajo general del proyecto',
-                        description: `Tiempo de trabajo general en el proyecto ${project.name}`,
-                        projectId: projectId,
-                        priority: 'MEDIUM',
-                        status: 'IN_PROGRESS',
-                        assignedTo: requestingUser.userId, // Asignar al usuario que está creando el registro
-                        createdBy: requestingUser.userId,
-                        isActive: true,
-                        estimatedHours: null
-                    };
-                    
-                    task = await this.taskRepository.create(generalTaskData);
-                    logger.info(`Tarea general creada: ${task.id} para proyecto ${project.name}`);
-                } catch (error) {
-                    logger.error(`Error creando tarea general:`, error);
-                    throw new Error('Error al crear tarea general: ' + error.message);
-                }
-            }
-            
+
             if (!task) {
                 throw new Error('Tarea no encontrada');
             }
 
             // Verificar permisos
             const targetUserId = timeEntryData.userId || requestingUser.userId;
-            
+
             if (!this.canUserCreateTimeEntry(requestingUser, task, targetUserId)) {
                 logger.warn(`Permisos insuficientes para crear time entry - Usuario: ${requestingUser.email}, Tarea: ${task.id}`);
                 throw new Error(ERROR_MESSAGES.FORBIDDEN);
             }
 
-            // Agregar userId antes de la validación
+            // Procesar fecha como string YYYY-MM-DD
+            //const dateString = parseDateOnly(timeEntryData.date);
+            const year = timeEntryData.year;
+            const month = timeEntryData.month;
+            const day = timeEntryData.day;
+            // Crear fecha como string ISO para evitar problemas de timezone
+            const dateForDB = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
             const timeEntryWithUserId = {
                 ...timeEntryData,
                 userId: timeEntryData.userId || requestingUser.userId,
+                date: dateForDB, // Mantener como string hasta el repository
             };
+
+            logger.info(`[TimeEntry] Procesando entrada - Fecha: ${dateForDB} (tipo: ${typeof dateForDB})`);
 
             // Buscar si existe un registro duplicado
             const existingEntry = await this.timeEntryRepository.findDuplicate(
@@ -161,7 +133,7 @@ class TimeEntryService {
             // Aplicar filtros según permisos del usuario
             const userFilters = await this.applyUserFilters(filters, requestingUser);
 
-            return await this.timeEntryRepository.findMany(userFilters, pagination);
+            return await this.timeEntryRepository.findMany(userFilters, pagination, requestingUser.role, requestingUser.userId);
         } catch (error) {
             logger.error('Error al obtener registros de tiempo:', error);
             throw error;
@@ -188,16 +160,24 @@ class TimeEntryService {
                 throw new Error(ERROR_MESSAGES.FORBIDDEN);
             }
 
-            // Validar datos si se actualizan horas o fecha
-            if (timeEntryData.hours || timeEntryData.date) {
+            // En update, solo permitir cambiar horas y descripción
+            // No se permite cambiar fecha, proyecto, tarea, etc.
+            const { year, month, day, userId, projectId, taskId, date, timePeriodId, ...processedData } = timeEntryData;
+            
+            if (year || month || day || date) {
+                logger.warn(`[TimeEntry Update] Intento de cambiar fecha en update ignorado para entrada ${timeEntryId}`);
+            }
+
+            // Validar datos si se actualizan horas
+            if (processedData.hours) {
                 const dataToValidate = {
                     ...existingTimeEntry,
-                    ...timeEntryData,
+                    ...processedData,
                 };
                 await this.validateTimeEntry(dataToValidate);
             }
 
-            const updatedTimeEntry = await this.timeEntryRepository.update(timeEntryId, timeEntryData);
+            const updatedTimeEntry = await this.timeEntryRepository.update(timeEntryId, processedData);
 
             logger.info(`Registro de tiempo actualizado: ${updatedTimeEntry.id} por ${requestingUser.email}`);
             return updatedTimeEntry;
@@ -362,17 +342,12 @@ class TimeEntryService {
             throw new Error(`No se pueden registrar más de ${LIMITS.MAX_HOURS_PER_DAY} horas en un día`);
         }
 
-        // Verificar que la fecha no exceda los días futuros permitidos
-        const SystemConfigService = require('./systemConfig.service');
-        const systemConfigService = new SystemConfigService();
-        const futureDaysAllowed = await systemConfigService.getFutureDaysAllowed();
-        
-        const today = new Date();
-        const entryDate = new Date(timeEntryData.date);
-        const maxAllowedDate = new Date(today.getTime() + futureDaysAllowed * 24 * 60 * 60 * 1000);
+        // Validar restricciones de fecha
+        // timeEntryData.date ya es un Date object creado desde year/month/day
+        const dateValidation = await this.systemConfigService.validateDateForTimeEntry(timeEntryData.date);
 
-        if (entryDate > maxAllowedDate) {
-            throw new Error(`No se pueden registrar horas más de ${futureDaysAllowed} días en el futuro`);
+        if (!dateValidation.isValid) {
+            throw new Error(dateValidation.reason);
         }
 
         // Verificar duplicados (userId, projectId, taskId, date) - solo si no se debe omitir
@@ -430,12 +405,12 @@ class TimeEntryService {
             const isSameUser = user.userId === targetUserId;
             const isSameArea = user.areaId && user.areaId === task.project?.areaId;
             const isAssignedToUser = task.assignedTo === user.userId;
-            
+
             // Si no tienen área asignada, solo pueden trabajar en tareas asignadas específicamente a ellos
             if (!user.areaId) {
                 return isSameUser && isAssignedToUser;
             }
-            
+
             // Si tienen área asignada, pueden trabajar en tareas de su área O asignadas a ellos
             return isSameUser && (isSameArea || isAssignedToUser);
         }

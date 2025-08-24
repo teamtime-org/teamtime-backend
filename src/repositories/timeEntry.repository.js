@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const { getTimePeriodForDate } = require('../utils/dateUtils');
+const { getTimePeriodForDate, parseDateOnly } = require('../utils/dateUtils');
 
 /**
  * Repositorio para operaciones de entrada de tiempo
@@ -68,8 +68,11 @@ class TimeEntryRepository {
      * @returns {Promise<Object>}
      */
     async create(entryData) {
+        // entryData.date ya es un Date object creado correctamente desde year/month/day
+        const dateForDB = entryData.date;
+        
         // Obtener el período de tiempo correspondiente
-        const periodInfo = getTimePeriodForDate(entryData.date);
+        const periodInfo = getTimePeriodForDate(dateForDB);
 
         // Buscar o crear el período
         let timePeriod = await prisma.timePeriod.findFirst({
@@ -92,9 +95,16 @@ class TimeEntryRepository {
             });
         }
 
+        // Extraer solo los campos que corresponden al modelo de base de datos
+        const { year, month, day, ...dbFields } = entryData;
+        
+        console.log('[Repository] dateForDB:', dateForDB, 'tipo:', typeof dateForDB);
+        console.log('[Repository] dbFields:', dbFields);
+        
         return await prisma.timeEntry.create({
             data: {
-                ...entryData,
+                ...dbFields,
+                date: dateForDB,
                 timePeriodId: timePeriod.id,
             },
             include: {
@@ -136,36 +146,18 @@ class TimeEntryRepository {
      * @returns {Promise<Object>}
      */
     async update(id, updateData) {
-        // Si se actualiza la fecha, recalcular el período
-        if (updateData.date) {
-            const periodInfo = getTimePeriodForDate(updateData.date);
-
-            let timePeriod = await prisma.timePeriod.findFirst({
-                where: {
-                    year: periodInfo.year,
-                    month: periodInfo.month,
-                    periodNumber: periodInfo.periodNumber,
-                },
-            });
-
-            if (!timePeriod) {
-                timePeriod = await prisma.timePeriod.create({
-                    data: {
-                        year: periodInfo.year,
-                        month: periodInfo.month,
-                        periodNumber: periodInfo.periodNumber,
-                        startDate: periodInfo.startDate,
-                        endDate: periodInfo.endDate,
-                    },
-                });
-            }
-
-            updateData.timePeriodId = timePeriod.id;
-        }
-
+        // En update solo se permiten cambios a horas y descripción
+        // No se recalcula período ni fecha
+        
+        // Extraer solo los campos que se pueden actualizar
+        const { year, month, day, userId, projectId, taskId, date, timePeriodId, ...dbFields } = updateData;
+        
+        console.log('[Repository Update] updateData:', updateData);
+        console.log('[Repository Update] dbFields after filter:', dbFields);
+        
         return await prisma.timeEntry.update({
             where: { id },
-            data: updateData,
+            data: dbFields,
             include: {
                 user: {
                     select: {
@@ -232,12 +224,17 @@ class TimeEntryRepository {
         if (filters.startDate || filters.endDate) {
             where.date = {};
             if (filters.startDate) {
-                where.date.gte = new Date(filters.startDate);
+                // Asumir que filters.startDate es string YYYY-MM-DD
+                where.date.gte = new Date(`${filters.startDate}T00:00:00.000Z`);
+                console.log('[Repository] startDate filter:', filters.startDate, '-> gte:', where.date.gte);
             }
             if (filters.endDate) {
-                where.date.lte = new Date(filters.endDate);
+                where.date.lte = new Date(`${filters.endDate}T23:59:59.999Z`);
+                console.log('[Repository] endDate filter:', filters.endDate, '-> lte:', where.date.lte);
             }
         }
+        
+        console.log('[Repository findMany] Final where clause:', JSON.stringify(where, null, 2));
 
         if (filters.isApproved !== undefined) {
             where.isApproved = filters.isApproved;
@@ -385,11 +382,23 @@ class TimeEntryRepository {
      * @returns {Promise<boolean>}
      */
     async existsDuplicate(userId, projectId, taskId, date, excludeId = null) {
+        // date ya es un Date object, crear rango del día
+        const dateObj = new Date(date);
+        const year = dateObj.getUTCFullYear();
+        const month = dateObj.getUTCMonth();
+        const day = dateObj.getUTCDate();
+        
+        const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
+        const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+        
         const where = {
             userId,
             projectId,
             taskId,
-            date,
+            date: {
+                gte: startOfDay,
+                lte: endOfDay
+            },
         };
 
         if (excludeId) {
@@ -409,11 +418,23 @@ class TimeEntryRepository {
      * @returns {Promise<Object|null>}
      */
     async findDuplicate(userId, projectId, taskId, date) {
+        // date ya es un Date object, crear rango del día
+        const dateObj = new Date(date);
+        const year = dateObj.getUTCFullYear();
+        const month = dateObj.getUTCMonth();
+        const day = dateObj.getUTCDate();
+        
+        const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
+        const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+        
         const where = {
             userId,
             projectId,
             taskId,
-            date,
+            date: {
+                gte: startOfDay,
+                lte: endOfDay
+            },
         };
 
         return await prisma.timeEntry.findFirst({
@@ -465,22 +486,21 @@ class TimeEntryRepository {
      * @returns {Promise<Object>}
      */
     async checkDailyHoursLimit(userId, date, newHours, excludeId = null) {
-        // Normalizar la fecha para asegurar que sea en formato YYYY-MM-DD
-        let normalizedDate;
-        if (typeof date === 'string') {
-            // Si es string, convertir a Date y luego a ISO string solo fecha
-            normalizedDate = new Date(date + 'T00:00:00.000Z').toISOString().split('T')[0];
-        } else if (date instanceof Date) {
-            // Si es Date, convertir a ISO string solo fecha
-            normalizedDate = date.toISOString().split('T')[0];
-        } else {
-            // Fallback
-            normalizedDate = new Date(date).toISOString().split('T')[0];
-        }
+        // date ya es un Date object, crear rango del día
+        const dateObj = new Date(date);
+        const year = dateObj.getUTCFullYear();
+        const month = dateObj.getUTCMonth();
+        const day = dateObj.getUTCDate();
+        
+        const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
+        const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
 
         const where = {
             userId,
-            date: new Date(normalizedDate + 'T00:00:00.000Z'), // Crear DateTime desde la fecha
+            date: {
+                gte: startOfDay,
+                lte: endOfDay
+            },
         };
 
         if (excludeId) {

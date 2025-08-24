@@ -34,6 +34,38 @@ const futureDaysSchema = Joi.object({
         })
 });
 
+const dateRestrictionSchema = Joi.object({
+    enabled: Joi.boolean().required()
+        .messages({
+            'boolean.base': 'El campo enabled debe ser un valor booleano',
+            'any.required': 'El campo enabled es requerido'
+        }),
+    futureDaysAllowed: Joi.when('enabled', {
+        is: true,
+        then: Joi.number().integer().min(0).max(365).required()
+            .messages({
+                'number.base': 'Los días futuros deben ser un número',
+                'number.integer': 'Los días futuros deben ser un número entero',
+                'number.min': 'Los días futuros no pueden ser negativos',
+                'number.max': 'Los días futuros no pueden ser más de 365',
+                'any.required': 'Los días futuros son requeridos cuando las restricciones están habilitadas'
+            }),
+        otherwise: Joi.optional()
+    }),
+    pastDaysAllowed: Joi.when('enabled', {
+        is: true,
+        then: Joi.number().integer().min(0).max(365).required()
+            .messages({
+                'number.base': 'Los días pasados deben ser un número',
+                'number.integer': 'Los días pasados deben ser un número entero',
+                'number.min': 'Los días pasados no pueden ser negativos',
+                'number.max': 'Los días pasados no pueden ser más de 365',
+                'any.required': 'Los días pasados son requeridos cuando las restricciones están habilitadas'
+            }),
+        otherwise: Joi.optional()
+    })
+});
+
 /**
  * @swagger
  * /system-config:
@@ -162,6 +194,135 @@ router.put('/future-days',
  *       403:
  *         $ref: '#/components/responses/ForbiddenError'
  */
+/**
+ * @swagger
+ * /system-config/date-restrictions:
+ *   get:
+ *     summary: Obtener configuraciones de restricciones de fecha
+ *     description: Obtiene las configuraciones completas de restricciones de fecha para timesheet.
+ *     tags: [Configuración del Sistema]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Configuraciones obtenidas exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     enabled:
+ *                       type: boolean
+ *                       example: true
+ *                     futureDaysAllowed:
+ *                       type: number
+ *                       example: 7
+ *                     pastDaysAllowed:
+ *                       type: number
+ *                       example: 30
+ */
+router.get('/date-restrictions',
+    authenticateToken,
+    systemConfigController.getDateRestrictionConfigs
+);
+
+/**
+ * @swagger
+ * /system-config/date-restrictions:
+ *   put:
+ *     summary: Configurar restricciones de fecha para timesheet
+ *     description: Configura las restricciones de fecha para registro de tiempo. Solo para administradores.
+ *     tags: [Configuración del Sistema]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - enabled
+ *             properties:
+ *               enabled:
+ *                 type: boolean
+ *                 example: true
+ *                 description: Habilitar o deshabilitar restricciones de fecha
+ *               futureDaysAllowed:
+ *                 type: integer
+ *                 minimum: 0
+ *                 maximum: 365
+ *                 example: 7
+ *                 description: Días futuros permitidos (requerido si enabled=true)
+ *               pastDaysAllowed:
+ *                 type: integer
+ *                 minimum: 0
+ *                 maximum: 365
+ *                 example: 30
+ *                 description: Días pasados permitidos (requerido si enabled=true)
+ *     responses:
+ *       200:
+ *         description: Configuraciones actualizadas exitosamente
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ */
+router.put('/date-restrictions',
+    authenticateToken,
+    validate(dateRestrictionSchema),
+    systemConfigController.setDateRestrictionConfigs
+);
+
+/**
+ * @swagger
+ * /system-config/validate-date:
+ *   get:
+ *     summary: Validar fecha para registro de tiempo
+ *     description: Valida si una fecha específica es permitida para registro de tiempo según las configuraciones actuales.
+ *     tags: [Configuración del Sistema]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Fecha a validar (formato YYYY-MM-DD)
+ *         example: "2024-01-15"
+ *     responses:
+ *       200:
+ *         description: Validación completada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     isValid:
+ *                       type: boolean
+ *                       example: true
+ *                     reason:
+ *                       type: string
+ *                       example: "Fecha no permitida por restricciones del sistema"
+ *                       description: Razón por la cual la fecha no es válida (solo si isValid=false)
+ */
+router.get('/validate-date',
+    authenticateToken,
+    systemConfigController.validateDateForTimeEntry
+);
+
 router.post('/initialize',
     authenticateToken,
     systemConfigController.initializeDefaults

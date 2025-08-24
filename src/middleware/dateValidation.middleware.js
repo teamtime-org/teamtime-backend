@@ -7,27 +7,37 @@ const logger = require('../utils/logger');
  */
 const validateFutureDate = async (req, res, next) => {
     try {
-        const { date } = req.body;
+        const { date, year, month, day } = req.body;
         
-        if (!date) {
+        let requestDate;
+        let dateValue;
+        
+        // Manejar tanto el formato antiguo (date) como el nuevo (year, month, day)
+        if (date) {
+            requestDate = new Date(date);
+            dateValue = date;
+        } else if (year && month && day) {
+            // Crear fecha usando UTC para evitar problemas de timezone
+            requestDate = new Date(Date.UTC(year, month - 1, day));
+            dateValue = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        } else {
             return next(); // Si no hay fecha, continuar (será validado por Joi)
         }
 
         const systemConfigService = new SystemConfigService();
         const futureDaysAllowed = await systemConfigService.getFutureDaysAllowed();
         
-        const requestDate = new Date(date);
         const maxDate = new Date(Date.now() + futureDaysAllowed * 24 * 60 * 60 * 1000);
         
         if (requestDate > maxDate) {
             const error = [{
-                field: 'date',
+                field: date ? 'date' : 'year',
                 message: `La fecha no puede ser más de ${futureDaysAllowed} días en el futuro`,
-                value: date
+                value: dateValue
             }];
             
             logger.warn('Fecha futura no permitida', {
-                requestedDate: date,
+                requestedDate: dateValue,
                 futureDaysAllowed,
                 maxAllowedDate: maxDate.toISOString().split('T')[0],
                 userId: req.user?.userId

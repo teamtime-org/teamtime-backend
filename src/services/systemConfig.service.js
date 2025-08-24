@@ -143,6 +143,113 @@ class SystemConfigService {
     }
 
     /**
+     * Obtener días pasados permitidos para registro de tiempo
+     * @returns {Promise<number>} - Número de días permitidos
+     */
+    async getPastDaysAllowed() {
+        const value = await this.getConfigValue('TIME_ENTRY_PAST_DAYS', '30');
+        return parseInt(value, 10) || 30; // Default 30 días
+    }
+
+    /**
+     * Configurar días pasados permitidos para registro de tiempo
+     * @param {number} days - Número de días a permitir
+     * @param {string} createdBy - ID del usuario que configura
+     * @returns {Promise<Object>} - Configuración actualizada
+     */
+    async setPastDaysAllowed(days, createdBy) {
+        return await this.setConfig(
+            'TIME_ENTRY_PAST_DAYS',
+            days.toString(),
+            `Número de días en el pasado permitidos para registro de tiempo (configurado por administrador)`,
+            createdBy
+        );
+    }
+
+    /**
+     * Verificar si las restricciones de fecha están habilitadas
+     * @returns {Promise<boolean>} - true si las restricciones están habilitadas
+     */
+    async isDateRestrictionsEnabled() {
+        const value = await this.getConfigValue('TIME_ENTRY_DATE_RESTRICTIONS_ENABLED', 'true');
+        return value.toLowerCase() === 'true';
+    }
+
+    /**
+     * Configurar si las restricciones de fecha están habilitadas
+     * @param {boolean} enabled - Si las restricciones están habilitadas
+     * @param {string} createdBy - ID del usuario que configura
+     * @returns {Promise<Object>} - Configuración actualizada
+     */
+    async setDateRestrictionsEnabled(enabled, createdBy) {
+        return await this.setConfig(
+            'TIME_ENTRY_DATE_RESTRICTIONS_ENABLED',
+            enabled.toString(),
+            `Habilitar restricciones de fecha para registro de tiempo (configurado por administrador)`,
+            createdBy
+        );
+    }
+
+    /**
+     * Obtener configuraciones completas de restricciones de fecha
+     * @returns {Promise<Object>} - Configuraciones de fecha
+     */
+    async getDateRestrictionConfigs() {
+        const [enabled, futureDays, pastDays] = await Promise.all([
+            this.isDateRestrictionsEnabled(),
+            this.getFutureDaysAllowed(),
+            this.getPastDaysAllowed()
+        ]);
+
+        return {
+            enabled,
+            futureDaysAllowed: futureDays,
+            pastDaysAllowed: pastDays
+        };
+    }
+
+    /**
+     * Validar si una fecha es permitida para registro de tiempo
+     * @param {Date} targetDate - Fecha objetivo
+     * @returns {Promise<{isValid: boolean, reason?: string}>} - Resultado de validación
+     */
+    async validateDateForTimeEntry(targetDate) {
+        const config = await this.getDateRestrictionConfigs();
+        
+        // Si las restricciones están deshabilitadas, permitir cualquier fecha
+        if (!config.enabled) {
+            return { isValid: true };
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const target = new Date(targetDate);
+        target.setHours(0, 0, 0, 0);
+
+        const diffTime = target - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        // Verificar fecha futura
+        if (diffDays > config.futureDaysAllowed) {
+            return {
+                isValid: false,
+                reason: `No se puede registrar tiempo más de ${config.futureDaysAllowed} días en el futuro`
+            };
+        }
+
+        // Verificar fecha pasada
+        if (diffDays < -config.pastDaysAllowed) {
+            return {
+                isValid: false,
+                reason: `No se puede registrar tiempo más de ${config.pastDaysAllowed} días en el pasado`
+            };
+        }
+
+        return { isValid: true };
+    }
+
+    /**
      * Inicializar configuraciones por defecto del sistema
      * @param {string} adminUserId - ID del usuario administrador
      */
@@ -153,6 +260,16 @@ class SystemConfigService {
                     key: 'TIME_ENTRY_FUTURE_DAYS',
                     value: '7',
                     description: 'Número de días en el futuro permitidos para registro de tiempo'
+                },
+                {
+                    key: 'TIME_ENTRY_PAST_DAYS',
+                    value: '30',
+                    description: 'Número de días en el pasado permitidos para registro de tiempo'
+                },
+                {
+                    key: 'TIME_ENTRY_DATE_RESTRICTIONS_ENABLED',
+                    value: 'true',
+                    description: 'Habilitar restricciones de fecha para registro de tiempo'
                 },
                 {
                     key: 'TIME_ENTRY_MAX_HOURS_PER_DAY',
