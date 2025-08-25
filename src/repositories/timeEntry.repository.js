@@ -70,30 +70,24 @@ class TimeEntryRepository {
     async create(entryData) {
         // Convertir string date a Date object para Prisma
         const dateForDB = new Date(entryData.date + 'T00:00:00.000Z');
-        console.log('🔧 [Repository] Date conversion:', entryData.date, '->', dateForDB);
 
-        // Obtener el período de tiempo correspondiente
-        const periodInfo = getTimePeriodForDate(dateForDB);
-
-        // Buscar o crear el período
+        // Buscar el período por rango de fechas (más preciso que el cálculo fijo)
         let timePeriod = await prisma.timePeriod.findFirst({
             where: {
-                year: periodInfo.year,
-                month: periodInfo.month,
-                periodNumber: periodInfo.periodNumber,
+                startDate: {
+                    lte: dateForDB,
+                },
+                endDate: {
+                    gte: dateForDB,
+                },
+                isActive: true,
             },
         });
 
         if (!timePeriod) {
-            timePeriod = await prisma.timePeriod.create({
-                data: {
-                    year: periodInfo.year,
-                    month: periodInfo.month,
-                    periodNumber: periodInfo.periodNumber,
-                    startDate: periodInfo.startDate,
-                    endDate: periodInfo.endDate,
-                },
-            });
+            // En lugar de crear automáticamente, lanzar error informativo
+            const dateStr = entryData.date;
+            throw new Error(`No existe un período de tiempo configurado para la fecha ${dateStr}. Por favor contacte al administrador para que configure los períodos de tiempo necesarios antes de registrar horas.`);
         }
 
         // Extraer solo los campos que corresponden al modelo de base de datos
@@ -151,8 +145,6 @@ class TimeEntryRepository {
         // Extraer solo los campos que se pueden actualizar
         const { year, month, day, userId, projectId, taskId, date, timePeriodId, ...dbFields } = updateData;
 
-        console.log('[Repository Update] updateData:', updateData);
-        console.log('[Repository Update] dbFields after filter:', dbFields);
 
         return await prisma.timeEntry.update({
             where: { id },
@@ -214,15 +206,12 @@ class TimeEntryRepository {
             if (filters.startDate) {
                 // Asumir que filters.startDate es string YYYY-MM-DD
                 where.date.gte = new Date(`${filters.startDate}T00:00:00.000Z`);
-                console.log('[Repository] startDate filter:', filters.startDate, '-> gte:', where.date.gte);
             }
             if (filters.endDate) {
                 where.date.lte = new Date(`${filters.endDate}T23:59:59.999Z`);
-                console.log('[Repository] endDate filter:', filters.endDate, '-> lte:', where.date.lte);
             }
         }
 
-        console.log('[Repository findMany] Final where clause:', JSON.stringify(where, null, 2));
 
         // if (filters.isApproved !== undefined) {
         //     where.isApproved = filters.isApproved;
