@@ -68,9 +68,10 @@ class TimeEntryRepository {
      * @returns {Promise<Object>}
      */
     async create(entryData) {
-        // entryData.date ya es un Date object creado correctamente desde year/month/day
-        const dateForDB = entryData.date;
-        
+        // Convertir string date a Date object para Prisma
+        const dateForDB = new Date(entryData.date + 'T00:00:00.000Z');
+        console.log('🔧 [Repository] Date conversion:', entryData.date, '->', dateForDB);
+
         // Obtener el período de tiempo correspondiente
         const periodInfo = getTimePeriodForDate(dateForDB);
 
@@ -96,11 +97,9 @@ class TimeEntryRepository {
         }
 
         // Extraer solo los campos que corresponden al modelo de base de datos
-        const { year, month, day, ...dbFields } = entryData;
-        
-        console.log('[Repository] dateForDB:', dateForDB, 'tipo:', typeof dateForDB);
-        console.log('[Repository] dbFields:', dbFields);
-        
+        const { year, month, day, date, ...dbFields } = entryData;
+
+
         return await prisma.timeEntry.create({
             data: {
                 ...dbFields,
@@ -148,13 +147,13 @@ class TimeEntryRepository {
     async update(id, updateData) {
         // En update solo se permiten cambios a horas y descripción
         // No se recalcula período ni fecha
-        
+
         // Extraer solo los campos que se pueden actualizar
         const { year, month, day, userId, projectId, taskId, date, timePeriodId, ...dbFields } = updateData;
-        
+
         console.log('[Repository Update] updateData:', updateData);
         console.log('[Repository Update] dbFields after filter:', dbFields);
-        
+
         return await prisma.timeEntry.update({
             where: { id },
             data: dbFields,
@@ -193,33 +192,22 @@ class TimeEntryRepository {
     async findMany(filters = {}, pagination = {}, userRole = null, userId = null) {
         const where = {};
 
-        // Aplicar filtros de acceso por rol
-        if (userRole === 'COORDINADOR') {
-            // Los coordinadores ven entradas de proyectos que crearon
-            where.project = {
-                createdBy: userId,
-            };
-        } else if (userRole === 'COLABORADOR') {
-            // Los colaboradores solo ven sus propias entradas
-            where.userId = userId;
-        }
 
-        // Aplicar filtros adicionales
-        if (filters.userId && userRole === 'ADMINISTRADOR') {
-            where.userId = filters.userId;
-        }
+        // Los usuarios solo ven sus propias entradas
+        where.userId = userId;
 
-        if (filters.projectId) {
-            where.projectId = filters.projectId;
-        }
 
-        if (filters.taskId) {
-            where.taskId = filters.taskId;
-        }
+        // if (filters.projectId) {
+        //     where.projectId = filters.projectId;
+        // }
 
-        if (filters.timePeriodId) {
-            where.timePeriodId = filters.timePeriodId;
-        }
+        // if (filters.taskId) {
+        //     where.taskId = filters.taskId;
+        // }
+
+        // if (filters.timePeriodId) {
+        //     where.timePeriodId = filters.timePeriodId;
+        // }
 
         if (filters.startDate || filters.endDate) {
             where.date = {};
@@ -233,30 +221,18 @@ class TimeEntryRepository {
                 console.log('[Repository] endDate filter:', filters.endDate, '-> lte:', where.date.lte);
             }
         }
-        
+
         console.log('[Repository findMany] Final where clause:', JSON.stringify(where, null, 2));
 
-        if (filters.isApproved !== undefined) {
-            where.isApproved = filters.isApproved;
-        }
+        // if (filters.isApproved !== undefined) {
+        //     where.isApproved = filters.isApproved;
+        // }
 
-        if (filters.pendingApproval) {
-            where.isApproved = false;
-        }
+        // if (filters.pendingApproval) {
+        //     where.isApproved = false;
+        // }
 
-        if (filters.myEntries && userId) {
-            where.userId = userId;
-        }
 
-        if (filters.minHours || filters.maxHours) {
-            where.hours = {};
-            if (filters.minHours) {
-                where.hours.gte = filters.minHours;
-            }
-            if (filters.maxHours) {
-                where.hours.lte = filters.maxHours;
-            }
-        }
 
         // Configurar ordenamiento
         const orderBy = {};
@@ -289,50 +265,7 @@ class TimeEntryRepository {
             where,
             skip: pagination.skip || 0,
             take: pagination.limit || 10,
-            orderBy,
-            include: {
-                user: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                    },
-                },
-                project: {
-                    select: {
-                        id: true,
-                        name: true,
-                        area: {
-                            select: {
-                                id: true,
-                                name: true,
-                                color: true,
-                            },
-                        },
-                    },
-                },
-                task: {
-                    select: {
-                        id: true,
-                        title: true,
-                    },
-                },
-                timePeriod: {
-                    select: {
-                        id: true,
-                        year: true,
-                        month: true,
-                        periodNumber: true,
-                    },
-                },
-                approver: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                    },
-                },
-            },
+            orderBy
         });
 
         return { timeEntries, total };
@@ -387,10 +320,10 @@ class TimeEntryRepository {
         const year = dateObj.getUTCFullYear();
         const month = dateObj.getUTCMonth();
         const day = dateObj.getUTCDate();
-        
+
         const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
         const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
-        
+
         const where = {
             userId,
             projectId,
@@ -423,10 +356,10 @@ class TimeEntryRepository {
         const year = dateObj.getUTCFullYear();
         const month = dateObj.getUTCMonth();
         const day = dateObj.getUTCDate();
-        
+
         const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
         const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
-        
+
         const where = {
             userId,
             projectId,
@@ -491,7 +424,7 @@ class TimeEntryRepository {
         const year = dateObj.getUTCFullYear();
         const month = dateObj.getUTCMonth();
         const day = dateObj.getUTCDate();
-        
+
         const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
         const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
 
