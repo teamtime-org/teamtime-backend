@@ -319,13 +319,38 @@ class TimePeriodRepository {
             where.userId = userId;
         }
 
+        // Obtener horas totales
         const actualHours = await prisma.timeEntry.aggregate({
             where,
             _sum: { hours: true }
         });
 
+        // Obtener horas PMO (proyectos generales)
+        const horasPMO = await prisma.timeEntry.aggregate({
+            where: {
+                ...where,
+                project: {
+                    isGeneral: true
+                }
+            },
+            _sum: { hours: true }
+        });
+
+        // Obtener horas Cliente (proyectos específicos)
+        const horasCliente = await prisma.timeEntry.aggregate({
+            where: {
+                ...where,
+                project: {
+                    isGeneral: false
+                }
+            },
+            _sum: { hours: true }
+        });
+
         const referenceHours = period.referenceHours || 0;
         const actualTotal = actualHours._sum.hours || 0;
+        const pmoHours = horasPMO._sum.hours || 0;
+        const clienteHours = horasCliente._sum.hours || 0;
         const difference = actualTotal - referenceHours;
         const percentage = referenceHours > 0 ? (actualTotal / referenceHours) * 100 : 0;
 
@@ -334,6 +359,8 @@ class TimePeriodRepository {
             userId,
             referenceHours,
             actualHours: actualTotal,
+            horasPMO: pmoHours,
+            horasCliente: clienteHours,
             difference,
             percentage,
             status: difference >= 0 ? 'above' : 'below'
