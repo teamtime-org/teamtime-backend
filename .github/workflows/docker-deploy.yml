@@ -62,7 +62,6 @@ jobs:
           echo "${{ secrets.DEPLOY_PRIVATE_KEY }}" | tr -d '\r' | ssh-add -
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.DEPLOY_SERVER_IP }} >> ~/.ssh/known_hosts
-          
           ssh ${{ secrets.DEPLOY_SERVER }} bash -c "'
             echo ${{ secrets.CI_REGISTRY_PASSWORD }} | docker login ${{ secrets.DOCKER_REGISTRY }} -u ${{ secrets.CI_REGISTRY_USER }} --password-stdin
             docker pull ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime/backend:1.0.${{ github.run_number }}
