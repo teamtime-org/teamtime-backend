@@ -24,7 +24,7 @@ jobs:
       - name: Log in to Docker Registry
         uses: docker/login-action@v3
         with:
-          registry: registry.einventiva.dev
+          registry: ${{ secrets.DOCKER_REGISTRY }}
           username: ${{ secrets.CI_REGISTRY_USER }}
           password: ${{ secrets.CI_REGISTRY_PASSWORD }}
 
@@ -32,7 +32,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: registry.einventiva.dev/einventiva/einventickets/backend-teamtime
+          images: ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime/backend
           tags: |
             type=raw,value=1.0.${{ github.run_number }}
 
@@ -64,8 +64,8 @@ jobs:
           ssh-keyscan -H ${{ secrets.DEPLOY_SERVER_IP }} >> ~/.ssh/known_hosts
           
           ssh ${{ secrets.DEPLOY_SERVER }} bash -c "'
-            echo ${{ secrets.CI_REGISTRY_PASSWORD }} | docker login registry.einventiva.dev -u ${{ secrets.CI_REGISTRY_USER }} --password-stdin
-            docker pull registry.einventiva.dev/einventiva/einventickets/backend-teamtime:1.0.${{ github.run_number }}
+            echo ${{ secrets.CI_REGISTRY_PASSWORD }} | docker login ${{ secrets.DOCKER_REGISTRY }} -u ${{ secrets.CI_REGISTRY_USER }} --password-stdin
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime/backend:1.0.${{ github.run_number }}
             docker stop ${{ env.IMAGE_NAME }} || true
             docker rm ${{ env.IMAGE_NAME }} || true
             docker run -d \
@@ -88,5 +88,5 @@ jobs:
               -e DEFAULT_TEMP_PASSWORD=\"${{ secrets.DEFAULT_TEMP_PASSWORD }}\" \
               -v teamtime-uploads:/app/uploads \
               -v teamtime-logs:/app/logs \
-              registry.einventiva.dev/einventiva/einventickets/backend-teamtime:1.0.${{ github.run_number }}
+              ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime/backend:1.0.${{ github.run_number }}
           '"
