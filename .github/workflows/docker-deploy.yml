@@ -61,8 +61,12 @@ jobs:
           eval "$(ssh-agent -s)"
           echo "${{ secrets.DEPLOY_PRIVATE_KEY }}" | tr -d '\r' | ssh-add -
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.DEPLOY_SERVER_IP }} >> ~/.ssh/known_hosts
-          ssh ${{ secrets.DEPLOY_SERVER }} bash -c "'
+          echo "Scanning host: ${{ secrets.DEPLOY_SERVER_IP }}"
+          ssh-keyscan -H ${{ secrets.DEPLOY_SERVER_IP }} >> ~/.ssh/known_hosts 2>&1
+          echo "Known hosts file content:"
+          cat ~/.ssh/known_hosts || echo "File not found or empty"
+          echo "Attempting SSH connection to: ${{ secrets.DEPLOY_SERVER }}"
+          ssh -o StrictHostKeyChecking=accept-new -v ${{ secrets.DEPLOY_SERVER }} bash -c "'
             echo ${{ secrets.CI_REGISTRY_PASSWORD }} | docker login ${{ secrets.DOCKER_REGISTRY }} -u ${{ secrets.CI_REGISTRY_USER }} --password-stdin
             docker pull ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime/backend:1.0.${{ github.run_number }}
             docker stop ${{ env.IMAGE_NAME }} || true
