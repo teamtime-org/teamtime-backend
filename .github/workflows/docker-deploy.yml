@@ -32,7 +32,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime/backend
+          images: ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime-backend
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
@@ -68,7 +68,7 @@ jobs:
           
           ssh ${{ secrets.DEPLOY_SERVER }} bash -c "'
             echo ${{ secrets.CI_REGISTRY_PASSWORD }} | docker login ${{ secrets.DOCKER_REGISTRY }} -u ${{ secrets.CI_REGISTRY_USER }} --password-stdin
-            docker pull ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime/backend:1.0.${{ github.run_number }}
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime-backend:1.0.${{ github.run_number }}
             docker stop ${{ env.IMAGE_NAME }} || true
             docker rm ${{ env.IMAGE_NAME }} || true
             docker run -d \
@@ -91,5 +91,5 @@ jobs:
               -e DEFAULT_TEMP_PASSWORD=\"${{ secrets.DEFAULT_TEMP_PASSWORD }}\" \
               -v teamtime-uploads:/app/uploads \
               -v teamtime-logs:/app/logs \
-              ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime/backend:1.0.${{ github.run_number }}
+              ${{ secrets.DOCKER_REGISTRY }}/einventiva/teamtime-backend:1.0.${{ github.run_number }}
           '"
