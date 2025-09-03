@@ -1,6 +1,13 @@
 /**
  * Utilidades para manejo de fechas y períodos quincenales
+ * Incluye manejo de timezone para Ciudad de México
  */
+
+const { format, parseISO, isValid } = require('date-fns');
+const { fromZonedTime, toZonedTime, formatInTimeZone } = require('date-fns-tz');
+
+// Zona horaria de Ciudad de México
+const MEXICO_TIMEZONE = 'America/Mexico_City';
 
 /**
  * Obtiene el período quincenal para una fecha dada
@@ -185,7 +192,130 @@ function getWorkDaysBetween(startDate, endDate) {
     return workDays;
 }
 
+/**
+ * Convertir una fecha string (YYYY-MM-DD) a Date en timezone de México
+ * @param {string} dateString - Fecha en formato YYYY-MM-DD
+ * @returns {Date} - Fecha ajustada al timezone de México
+ */
+function parseToMexicoTimezone(dateString) {
+    // Crear fecha asumiendo que es en timezone de México
+    const localDate = parseISO(`${dateString}T12:00:00`); // Usar mediodía para evitar problemas de DST
+    return fromZonedTime(localDate, MEXICO_TIMEZONE);
+}
+
+/**
+ * Formatear una fecha UTC a string en timezone de México
+ * @param {Date} date - Fecha UTC
+ * @returns {string} - Fecha formateada en YYYY-MM-DD
+ */
+function formatFromMexicoTimezone(date) {
+    const mexicoDate = toZonedTime(date, MEXICO_TIMEZONE);
+    return format(mexicoDate, 'yyyy-MM-dd');
+}
+
+/**
+ * Convertir una fecha para que represente el mismo día en timezone de México
+ * Útil para fechas que vienen del frontend
+ * @param {Date|string} input - Fecha o string de fecha
+ * @returns {Date} - Fecha ajustada para México
+ */
+function adjustToMexicoTimezone(input) {
+    if (!input) return new Date();
+    
+    let dateString;
+    if (typeof input === 'string') {
+        // Si es string en formato YYYY-MM-DD, usar directamente
+        if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+            return parseToMexicoTimezone(input);
+        }
+        dateString = input.split('T')[0]; // Extraer solo la parte de fecha
+    } else {
+        // Si es Date object, extraer la fecha en timezone de México
+        const mexicoDate = toZonedTime(new Date(input), MEXICO_TIMEZONE);
+        dateString = format(mexicoDate, 'yyyy-MM-dd');
+    }
+    
+    return parseToMexicoTimezone(dateString);
+}
+
+/**
+ * Crear Date object para una fecha específica en timezone de México
+ * @param {number} year 
+ * @param {number} month - Base 1 (enero = 1)
+ * @param {number} day 
+ * @returns {Date} - Fecha en UTC que representa el día en México
+ */
+function createMexicoDate(year, month, day) {
+    const dateString = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+    return parseToMexicoTimezone(dateString);
+}
+
+/**
+ * Formatear fecha para logging con timezone de México
+ * @param {Date} date 
+ * @returns {string}
+ */
+function formatForLog(date) {
+    return formatInTimeZone(date, MEXICO_TIMEZONE, 'yyyy-MM-dd HH:mm:ss zzz');
+}
+
+/**
+ * Convertir cualquier formato de fecha a string YYYY-MM-DD
+ * @param {Date|string} input - Fecha o string de fecha  
+ * @returns {string} - String en formato YYYY-MM-DD
+ */
+function parseDateOnly(input) {
+    if (!input) {
+        // Si no hay input, devolver fecha de hoy
+        const today = new Date();
+        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    }
+    
+    if (typeof input === 'string') {
+        // Si ya es YYYY-MM-DD, devolverlo tal cual
+        if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+            return input;
+        }
+        // Si es ISO string, extraer solo la fecha
+        if (input.includes('T')) {
+            return input.split('T')[0];
+        }
+        // Intentar parsear como fecha
+        const date = new Date(input);
+        if (!isNaN(date.getTime())) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+    }
+    
+    // Si es Date object
+    if (input instanceof Date && !isNaN(input.getTime())) {
+        return `${input.getFullYear()}-${String(input.getMonth() + 1).padStart(2, '0')}-${String(input.getDate()).padStart(2, '0')}`;
+    }
+    
+    // Fallback: intentar crear Date y formatear
+    const date = new Date(input);
+    if (!isNaN(date.getTime())) {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+    
+    throw new Error(`No se pudo parsear la fecha: ${input}`);
+}
+
+/**
+ * Formatear fecha a string YYYY-MM-DD
+ * @param {Date} date 
+ * @returns {string}
+ */
+function formatDateOnly(date) {
+    if (!date) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 module.exports = {
+    MEXICO_TIMEZONE,
     getTimePeriodForDate,
     generateTimePeriodsForYear,
     isDateInPeriod,
@@ -198,4 +328,13 @@ module.exports = {
     getDaysDifference,
     isWeekend,
     getWorkDaysBetween,
+    // Nuevas funciones de timezone
+    parseToMexicoTimezone,
+    formatFromMexicoTimezone,
+    adjustToMexicoTimezone,
+    createMexicoDate,
+    formatForLog,
+    // Nuevas funciones para fechas simples
+    parseDateOnly,
+    formatDateOnly,
 };

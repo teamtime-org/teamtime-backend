@@ -135,6 +135,28 @@ class UserController {
     };
 
     /**
+     * Establecer password para usuario importado
+     */
+    setUserPassword = async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { password } = req.body;
+
+            if (!password || password.length < 6) {
+                return ApiResponse.error(res, 'El password debe tener al menos 6 caracteres', 400);
+            }
+
+            await this.userService.setUserPassword(id, password, req.user);
+
+            logger.info(`Password establecido para usuario: ${id} por ${req.user.email}`);
+            return ApiResponse.success(res, null, 'Password establecido exitosamente');
+        } catch (error) {
+            logger.error('Error al establecer password:', error);
+            return ApiResponse.error(res, error.message, 400);
+        }
+    };
+
+    /**
      * Obtener estadísticas de usuarios
      */
     getUserStats = async (req, res) => {

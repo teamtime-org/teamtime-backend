@@ -210,6 +210,17 @@ class ExcelImportController {
 
         } catch (error) {
             logger.error('Error en controlador de importación:', error);
+            
+            // Manejar errores de autenticación específicamente
+            if (error.code === 'INVALID_TOKEN' || error.statusCode === 401) {
+                return res.status(401).json({
+                    success: false,
+                    message: error.message,
+                    code: 'INVALID_TOKEN',
+                    requiresReauth: true
+                });
+            }
+            
             res.status(500).json({
                 success: false,
                 message: 'Error interno del servidor',

@@ -2,6 +2,7 @@ const express = require('express');
 const timeEntryController = require('../controllers/timeEntry.controller');
 const { validate } = require('../middleware/validation.middleware');
 const { authenticateToken } = require('../middleware/auth.middleware');
+const { validateFutureDate } = require('../middleware/dateValidation.middleware');
 const {
     createTimeEntrySchema,
     updateTimeEntrySchema
@@ -78,6 +79,7 @@ const router = express.Router();
 router.post('/',
     authenticateToken,
     validate(createTimeEntrySchema),
+    validateFutureDate,
     timeEntryController.createTimeEntry
 );
 

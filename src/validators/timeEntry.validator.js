@@ -1,5 +1,6 @@
 const Joi = require('joi');
 const { LIMITS } = require('../utils/constants');
+const SystemConfigService = require('../services/systemConfig.service');
 
 /**
  * Esquemas de validación para registros de tiempo
@@ -7,6 +8,12 @@ const { LIMITS } = require('../utils/constants');
 
 // Esquema para creación de entrada de tiempo
 const createTimeEntrySchema = Joi.object({
+    userId: Joi.string()
+        .uuid()
+        .messages({
+            'string.uuid': 'El ID del usuario debe ser un UUID válido',
+        }),
+
     projectId: Joi.string()
         .uuid()
         .required()
@@ -16,20 +23,55 @@ const createTimeEntrySchema = Joi.object({
         }),
 
     taskId: Joi.string()
-        .uuid()
+        .custom((value, helpers) => {
+            // Permitir UUIDs 
+            if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+                return helpers.error('any.invalid');
+            }
+            return value;
+        })
         .messages({
-            'string.uuid': 'El ID de la tarea debe ser un UUID válido',
+            'any.invalid': 'El ID de la tarea debe ser un UUID válido o una tarea general con formato "general-{uuid}"',
         }),
 
-    date: Joi.date()
-        .iso()
-        .max('now')
+    // Ahora recibimos year, month, day como enteros separados
+    year: Joi.number()
+        .integer()
+        .min(2020)
+        .max(2030)
         .required()
         .messages({
-            'date.base': 'La fecha debe ser una fecha válida',
-            'date.format': 'La fecha debe estar en formato ISO (YYYY-MM-DD)',
-            'date.max': 'La fecha no puede ser futura',
-            'any.required': 'La fecha es requerida',
+            'number.base': 'El año debe ser un número',
+            'number.integer': 'El año debe ser un número entero',
+            'number.min': 'El año debe ser mayor o igual a 2020',
+            'number.max': 'El año debe ser menor o igual a 2030',
+            'any.required': 'El año es requerido',
+        }),
+    
+    month: Joi.number()
+        .integer()
+        .min(1)
+        .max(12)
+        .required()
+        .messages({
+            'number.base': 'El mes debe ser un número',
+            'number.integer': 'El mes debe ser un número entero',
+            'number.min': 'El mes debe ser entre 1 y 12',
+            'number.max': 'El mes debe ser entre 1 y 12',
+            'any.required': 'El mes es requerido',
+        }),
+    
+    day: Joi.number()
+        .integer()
+        .min(1)
+        .max(31)
+        .required()
+        .messages({
+            'number.base': 'El día debe ser un número',
+            'number.integer': 'El día debe ser un número entero',
+            'number.min': 'El día debe ser entre 1 y 31',
+            'number.max': 'El día debe ser entre 1 y 31',
+            'any.required': 'El día es requerido',
         }),
 
     hours: Joi.number()
@@ -66,19 +108,50 @@ const updateTimeEntrySchema = Joi.object({
         }),
 
     taskId: Joi.string()
-        .uuid()
+        .custom((value, helpers) => {
+            // Permitir UUIDs 
+            if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+                return helpers.error('any.invalid');
+            }
+            return value;
+        })
         .allow(null)
         .messages({
-            'string.uuid': 'El ID de la tarea debe ser un UUID válido',
+            'any.invalid': 'El ID de la tarea debe ser un UUID válido',
         }),
 
-    date: Joi.date()
-        .iso()
-        .max('now')
+    // Ahora recibimos year, month, day como enteros separados
+    year: Joi.number()
+        .integer()
+        .min(2020)
+        .max(2030)
         .messages({
-            'date.base': 'La fecha debe ser una fecha válida',
-            'date.format': 'La fecha debe estar en formato ISO (YYYY-MM-DD)',
-            'date.max': 'La fecha no puede ser futura',
+            'number.base': 'El año debe ser un número',
+            'number.integer': 'El año debe ser un número entero',
+            'number.min': 'El año debe ser mayor o igual a 2020',
+            'number.max': 'El año debe ser menor o igual a 2030',
+        }),
+    
+    month: Joi.number()
+        .integer()
+        .min(1)
+        .max(12)
+        .messages({
+            'number.base': 'El mes debe ser un número',
+            'number.integer': 'El mes debe ser un número entero',
+            'number.min': 'El mes debe ser entre 1 y 12',
+            'number.max': 'El mes debe ser entre 1 y 12',
+        }),
+    
+    day: Joi.number()
+        .integer()
+        .min(1)
+        .max(31)
+        .messages({
+            'number.base': 'El día debe ser un número',
+            'number.integer': 'El día debe ser un número entero',
+            'number.min': 'El día debe ser entre 1 y 31',
+            'number.max': 'El día debe ser entre 1 y 31',
         }),
 
     hours: Joi.number()

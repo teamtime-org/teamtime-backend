@@ -1,8 +1,10 @@
 const TimeEntryRepository = require('../repositories/timeEntry.repository');
 const TaskRepository = require('../repositories/task.repository');
+const SystemConfigService = require('./systemConfig.service');
 const { USER_ROLES, LIMITS, ERROR_MESSAGES } = require('../utils/constants');
-const { isSameDay, startOfDay, endOfDay } = require('../utils/dateUtils');
+const { isSameDay, startOfDay, endOfDay, parseDateOnly, formatDateOnly, formatForLog } = require('../utils/dateUtils');
 const logger = require('../utils/logger');
+const prisma = require('../config/database');
 
 /**
  * Servicio para gestión de registros de tiempo
@@ -11,6 +13,7 @@ class TimeEntryService {
     constructor() {
         this.timeEntryRepository = new TimeEntryRepository();
         this.taskRepository = new TaskRepository();
+        this.systemConfigService = new SystemConfigService();
     }
 
     /**
@@ -21,22 +24,36 @@ class TimeEntryService {
      */
     async createTimeEntry(timeEntryData, requestingUser) {
         try {
-            // Verificar que la tarea existe
-            const task = await this.taskRepository.findById(timeEntryData.taskId);
+            // Verificar que la tarea existe o es una tarea general
+            let task = await this.taskRepository.findById(timeEntryData.taskId);
+
             if (!task) {
                 throw new Error('Tarea no encontrada');
             }
 
             // Verificar permisos
-            if (!this.canUserCreateTimeEntry(requestingUser, task, timeEntryData.userId)) {
+            const targetUserId = timeEntryData.userId || requestingUser.userId;
+
+            if (!this.canUserCreateTimeEntry(requestingUser, task, targetUserId)) {
+                logger.warn(`Permisos insuficientes para crear time entry - Usuario: ${requestingUser.email}, Tarea: ${task.id}`);
                 throw new Error(ERROR_MESSAGES.FORBIDDEN);
             }
 
-            // Agregar userId antes de la validación
+            // Procesar fecha como string YYYY-MM-DD
+            //const dateString = parseDateOnly(timeEntryData.date);
+            const year = timeEntryData.year;
+            const month = timeEntryData.month;
+            const day = timeEntryData.day;
+            // Crear fecha como string ISO para evitar problemas de timezone
+            const dateForDB = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
             const timeEntryWithUserId = {
                 ...timeEntryData,
                 userId: timeEntryData.userId || requestingUser.userId,
+                date: dateForDB, // Mantener como string hasta el repository
             };
+
+            logger.info(`[TimeEntry] Procesando entrada - Fecha: ${dateForDB} (tipo: ${typeof dateForDB})`);
 
             // Buscar si existe un registro duplicado
             const existingEntry = await this.timeEntryRepository.findDuplicate(
@@ -116,7 +133,7 @@ class TimeEntryService {
             // Aplicar filtros según permisos del usuario
             const userFilters = await this.applyUserFilters(filters, requestingUser);
 
-            return await this.timeEntryRepository.findMany(userFilters, pagination);
+            return await this.timeEntryRepository.findMany(userFilters, pagination, requestingUser.role, requestingUser.userId);
         } catch (error) {
             logger.error('Error al obtener registros de tiempo:', error);
             throw error;
@@ -143,16 +160,24 @@ class TimeEntryService {
                 throw new Error(ERROR_MESSAGES.FORBIDDEN);
             }
 
-            // Validar datos si se actualizan horas o fecha
-            if (timeEntryData.hours || timeEntryData.date) {
+            // En update, solo permitir cambiar horas y descripción
+            // No se permite cambiar fecha, proyecto, tarea, etc.
+            const { year, month, day, userId, projectId, taskId, date, timePeriodId, ...processedData } = timeEntryData;
+            
+            if (year || month || day || date) {
+                logger.warn(`[TimeEntry Update] Intento de cambiar fecha en update ignorado para entrada ${timeEntryId}`);
+            }
+
+            // Validar datos si se actualizan horas
+            if (processedData.hours) {
                 const dataToValidate = {
                     ...existingTimeEntry,
-                    ...timeEntryData,
+                    ...processedData,
                 };
                 await this.validateTimeEntry(dataToValidate);
             }
 
-            const updatedTimeEntry = await this.timeEntryRepository.update(timeEntryId, timeEntryData);
+            const updatedTimeEntry = await this.timeEntryRepository.update(timeEntryId, processedData);
 
             logger.info(`Registro de tiempo actualizado: ${updatedTimeEntry.id} por ${requestingUser.email}`);
             return updatedTimeEntry;
@@ -317,12 +342,12 @@ class TimeEntryService {
             throw new Error(`No se pueden registrar más de ${LIMITS.MAX_HOURS_PER_DAY} horas en un día`);
         }
 
-        // Verificar que la fecha no sea futura
-        const today = new Date();
-        const entryDate = new Date(timeEntryData.date);
+        // Validar restricciones de fecha
+        // timeEntryData.date ya es un Date object creado desde year/month/day
+        const dateValidation = await this.systemConfigService.validateDateForTimeEntry(timeEntryData.date);
 
-        if (entryDate > today) {
-            throw new Error('No se pueden registrar horas en fechas futuras');
+        if (!dateValidation.isValid) {
+            throw new Error(dateValidation.reason);
         }
 
         // Verificar duplicados (userId, projectId, taskId, date) - solo si no se debe omitir
@@ -371,14 +396,23 @@ class TimeEntryService {
         // Coordinadores pueden crear registros para usuarios de su área
         if (user.role === USER_ROLES.COORDINADOR) {
             // Verificar que la tarea pertenece a un proyecto de su área
-            return user.areaId === task.project.areaId;
+            return user.areaId === task.project?.areaId;
         }
 
         // Colaboradores solo pueden crear registros para sí mismos
         if (user.role === USER_ROLES.COLABORADOR) {
             // Pueden crear registros para tareas de su área O asignadas a ellos
-            return user.id === targetUserId &&
-                (user.areaId === task.project.areaId || task.assignedTo === user.id);
+            const isSameUser = user.userId === targetUserId;
+            const isSameArea = user.areaId && user.areaId === task.project?.areaId;
+            const isAssignedToUser = task.assignedTo === user.userId;
+
+            // Si no tienen área asignada, solo pueden trabajar en tareas asignadas específicamente a ellos
+            if (!user.areaId) {
+                return isSameUser && isAssignedToUser;
+            }
+
+            // Si tienen área asignada, pueden trabajar en tareas de su área O asignadas a ellos
+            return isSameUser && (isSameArea || isAssignedToUser);
         }
 
         return false;
@@ -446,7 +480,7 @@ class TimeEntryService {
         }
 
         // Colaboradores solo pueden eliminar sus propios registros
-        return user.id === timeEntry.userId;
+        return user.userId === timeEntry.userId;
     }
 
     /**
@@ -469,7 +503,7 @@ class TimeEntryService {
         }
 
         // Colaboradores solo pueden ver sus propios registros
-        return user.id === targetUserId;
+        return user.userId === targetUserId;
     }
 
     /**
@@ -495,7 +529,7 @@ class TimeEntryService {
         // Colaboradores solo ven sus propios registros
         return {
             ...filters,
-            userId: user.id,
+            userId: user.userId,
         };
     }
 }

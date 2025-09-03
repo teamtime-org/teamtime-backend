@@ -7,9 +7,11 @@ const areaRoutes = require('./area.routes');
 const projectRoutes = require('./project.routes');
 const taskRoutes = require('./task.routes');
 const timeEntryRoutes = require('./timeEntry.routes');
+const timePeriodRoutes = require('./timePeriod.routes');
 const excelProjectMigrationRoutes = require('./excelProjectMigration.routes');
 const excelImportRoutes = require('./excelImport.routes');
 const catalogRoutes = require('./catalog.routes');
+const systemConfigRoutes = require('./systemConfig.routes');
 
 const router = express.Router();
 
@@ -64,9 +66,11 @@ router.use('/areas', areaRoutes);
 router.use('/projects', projectRoutes);
 router.use('/tasks', taskRoutes);
 router.use('/time-entries', timeEntryRoutes);
+router.use('/time-periods', timePeriodRoutes);
 router.use('/excel-projects', excelProjectMigrationRoutes);
 router.use('/excel-import', excelImportRoutes);
 router.use('/catalogs', catalogRoutes);
+router.use('/system-config', systemConfigRoutes);
 
 // 404 handler for API routes
 router.use('*', (req, res) => {

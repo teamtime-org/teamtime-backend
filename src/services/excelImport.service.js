@@ -1,14 +1,16 @@
 const ExcelJS = require('exceljs');
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/database');
-const { USER_ROLES } = require('../utils/constants');
+const { USER_ROLES, STANDARD_PROJECT_TASKS, GENERAL_PROJECT_TASKS } = require('../utils/constants');
 const logger = require('../utils/logger');
+const ProjectService = require('./project.service');
 
 /**
  * Servicio para importación de proyectos desde Excel
  */
 class ExcelImportService {
     constructor() {
+        this.projectService = new ProjectService();
         this.columnMapping = {
             'ID': 'excelId',
             'Title': 'title',
@@ -80,8 +82,24 @@ class ExcelImportService {
                 throw new Error('ID de área requerido para importación');
             }
 
+            // Verificar que el usuario existe en la base de datos y actualizar ID si es necesario
+            let userExists = await prisma.user.findUnique({
+                where: { id: requestingUser.userId },
+                select: { id: true, email: true, firstName: true, lastName: true, role: true }
+            });
+
+            if (!userExists) {
+                // Por seguridad, si el userId del token no existe, invalidar la sesión
+                logger.error(`Token de seguridad inválido: Usuario con ID ${requestingUser.userId} no existe. Email del token: ${requestingUser.email}`);
+                
+                const error = new Error('Token de autenticación inválido. Por favor, inicie sesión nuevamente.');
+                error.statusCode = 401; // Unauthorized
+                error.code = 'INVALID_TOKEN';
+                throw error;
+            }
+
             // Verificar permisos
-            if (requestingUser.role !== USER_ROLES.ADMINISTRADOR) {
+            if (userExists.role !== USER_ROLES.ADMINISTRADOR) {
                 throw new Error('Solo los administradores pueden importar proyectos');
             }
 
@@ -178,10 +196,29 @@ class ExcelImportService {
             throw new Error('Usuario solicitante no definido para procesar datos');
         }
 
-        // Guardar el usuario solicitante para usar en saveProject
-        this.requestingUser = requestingUser;
+        // Verificar que el usuario existe en la base de datos y actualizar ID si es necesario
+        let userExists = await prisma.user.findUnique({
+            where: { id: requestingUser.userId },
+            select: { id: true, email: true, firstName: true, lastName: true }
+        });
 
-        logger.info(`Procesando datos con usuario: ${requestingUser.email} (ID: ${requestingUser.userId})`);        // Crear un cache de usuarios para evitar duplicados
+        if (!userExists) {
+            // Por seguridad, si el userId del token no existe, invalidar la sesión
+            logger.error(`Token de seguridad inválido: Usuario con ID ${requestingUser.userId} no existe. Email del token: ${requestingUser.email}`);
+            
+            const error = new Error('Token de autenticación inválido. Por favor, inicie sesión nuevamente.');
+            error.statusCode = 401; // Unauthorized
+            error.code = 'INVALID_TOKEN';
+            throw error;
+        }
+
+        // Guardar el usuario solicitante y areaId para usar en saveProject y creación de usuarios
+        this.requestingUser = requestingUser;
+        this.projectAreaId = areaId;
+
+        logger.info(`Procesando datos con usuario: ${requestingUser.email} (ID: ${requestingUser.userId}) - Área del proyecto: ${areaId}`);
+        
+        // Crear un cache de usuarios para evitar duplicados
         this.userCache = new Map();
         this.emailCounter = new Map(); // Cache para contadores de emails
 
@@ -718,13 +755,19 @@ class ExcelImportService {
         }
 
         // Verificar que el usuario existe en la base de datos
-        const userExists = await prisma.user.findUnique({
+        let userExists = await prisma.user.findUnique({
             where: { id: effectiveUser.userId },
             select: { id: true, email: true, firstName: true, lastName: true }
         });
 
         if (!userExists) {
-            throw new Error(`Usuario con ID ${effectiveUser.userId} no existe en la base de datos. Email del token: ${effectiveUser.email}`);
+            // Por seguridad, si el userId del token no existe, invalidar la sesión
+            logger.error(`Token de seguridad inválido: Usuario con ID ${effectiveUser.userId} no existe. Email del token: ${effectiveUser.email}`);
+            
+            const error = new Error('Token de autenticación inválido. Por favor, inicie sesión nuevamente.');
+            error.statusCode = 401; // Unauthorized
+            error.code = 'INVALID_TOKEN';
+            throw error;
         }
 
         logger.debug(`Usuario validado para crear proyecto: ${userExists.email} (${userExists.firstName} ${userExists.lastName})`);
@@ -732,10 +775,12 @@ class ExcelImportService {
         // Crear o actualizar proyecto principal
         let project;
         let excelProject;
+        let existingProject = null;
+        let isNewProject = true;
 
         if (excelProjectData.excelId) {
             // Buscar proyecto existente por excelId
-            const existingProject = await prisma.project.findFirst({
+            existingProject = await prisma.project.findFirst({
                 where: {
                     excelDetails: {
                         excelId: excelProjectData.excelId
@@ -745,6 +790,7 @@ class ExcelImportService {
             });
 
             if (existingProject) {
+                isNewProject = false;
                 // Actualizar proyecto existente
                 project = await prisma.project.update({
                     where: { id: existingProject.id },
@@ -803,7 +849,78 @@ class ExcelImportService {
             }
         }
 
+        // Crear tareas estándar para proyectos nuevos (no actualizaciones)
+        if (isNewProject) {
+            logger.info(`Creando tareas estándar para proyecto nuevo: ${project.id} (${project.name})`);
+            await this.createStandardProjectTasks(project.id, effectiveUser.userId);
+        } else {
+            logger.info(`Omitiendo tareas estándar para proyecto existente: ${project.id} (${project.name})`);
+        }
+
+        // Crear asignaciones de proyecto para coordinador y mentor (project-level assignments)
+        await this.createProjectAssignments(project.id, excelProject, effectiveUser.userId);
+
+        // Crear o obtener proyecto general del área y asignar usuarios
+        await this.handleGeneralProjectAssignments(project.areaId, excelProject, effectiveUser.userId);
+
         return { project, excelProject };
+    }
+
+    /**
+     * Crear asignaciones de proyecto para coordinador y mentor
+     * Ahora los usuarios se asignan al proyecto directamente, no a tareas individuales
+     * @param {string} projectId - ID del proyecto
+     * @param {Object} excelProject - Datos del proyecto Excel
+     * @param {string} assignedByUserId - ID del usuario que asigna
+     * @returns {Promise<Array>}
+     */
+    async createProjectAssignments(projectId, excelProject, assignedByUserId) {
+        const assignments = [];
+        
+        try {
+            // Eliminar asignaciones existentes para el proyecto
+            await prisma.projectAssignment.updateMany({
+                where: { 
+                    projectId: projectId,
+                    isActive: true 
+                },
+                data: { isActive: false }
+            });
+
+            // Asignar coordinador si existe
+            if (excelProject.coordinatorId) {
+                const coordinatorAssignment = await prisma.projectAssignment.create({
+                    data: {
+                        projectId: projectId,
+                        userId: excelProject.coordinatorId,
+                        assignedById: assignedByUserId,
+                        isActive: true
+                    }
+                });
+                assignments.push(coordinatorAssignment);
+                logger.info(`Coordinador asignado al proyecto ${projectId}: ${excelProject.coordinatorId}`);
+            }
+
+            // Asignar mentor si existe
+            if (excelProject.mentorId) {
+                const mentorAssignment = await prisma.projectAssignment.create({
+                    data: {
+                        projectId: projectId,
+                        userId: excelProject.mentorId,
+                        assignedById: assignedByUserId,
+                        isActive: true
+                    }
+                });
+                assignments.push(mentorAssignment);
+                logger.info(`Mentor asignado al proyecto ${projectId}: ${excelProject.mentorId}`);
+            }
+
+            return assignments;
+        } catch (error) {
+            logger.error(`Error creando asignaciones para proyecto ${projectId}:`, error);
+            // No lanzar error para no interrumpir la importación del proyecto
+            return [];
+        }
     }
 
     /**
@@ -1010,24 +1127,58 @@ class ExcelImportService {
             return this.userCache.get(cacheKey);
         }
 
-        // Buscar usuario existente
+        // Buscar usuario existente con lógica mejorada
         const nameParts = name.split(' ');
         const firstName = nameParts[0];
         const lastName = nameParts.slice(1).join(' ') || firstName;
 
         logger.info(`    Buscando usuario existente: ${firstName} ${lastName}`);
 
-        let user = await prisma.user.findFirst({
-            where: {
-                AND: [
-                    { firstName: { equals: firstName, mode: 'insensitive' } },
-                    { lastName: { equals: lastName, mode: 'insensitive' } }
-                ]
-            }
-        });
+        let user = await this.findExistingUserByName(firstName, lastName);
 
         if (user) {
             logger.info(`    Usuario encontrado en BD: ${user.id} - ${user.email}`);
+            
+            // Si el usuario existe pero no tiene área asignada, asignarle el área del proyecto
+            if (!user.areaId && this.projectAreaId) {
+                try {
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: { areaId: this.projectAreaId }
+                    });
+                    logger.info(`    Área asignada al usuario existente: ${user.email} -> Área: ${this.projectAreaId}`);
+                    user.areaId = this.projectAreaId; // Actualizar objeto local
+                } catch (error) {
+                    logger.warn(`    No se pudo asignar área a usuario ${user.id}: ${error.message}`);
+                }
+            }
+            
+            // Asignar usuario al proyecto general de su área (si tiene área)
+            if (user.areaId || this.projectAreaId) {
+                await this.assignUserToAreaGeneralProject(user.id, user.areaId || this.projectAreaId);
+            }
+            
+            // Verificar si necesita actualizar email (si está usando email genérico importado)
+            if (user.email.includes('@imported.com')) {
+                // Generar email más específico usando el proyecto actual
+                let baseEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+                let newEmail = `${baseEmail}@teamtime.com`;
+                
+                // Verificar que el nuevo email no exista
+                const emailExists = await prisma.user.findUnique({ where: { email: newEmail } });
+                if (!emailExists && newEmail !== user.email) {
+                    try {
+                        await prisma.user.update({
+                            where: { id: user.id },
+                            data: { email: newEmail }
+                        });
+                        logger.info(`    Email actualizado: ${user.email} -> ${newEmail}`);
+                        user.email = newEmail; // Actualizar objeto local
+                    } catch (error) {
+                        logger.warn(`    No se pudo actualizar email para ${user.id}: ${error.message}`);
+                    }
+                }
+            }
         } else {
             logger.info(`    Usuario no existe, se creará nuevo`);
         }
@@ -1036,7 +1187,7 @@ class ExcelImportService {
             // Generar email único
             let baseEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
             let counter = this.emailCounter.get(baseEmail) || 0;
-            let email = counter === 0 ? `${baseEmail}@imported.com` : `${baseEmail}${counter}@imported.com`;
+            let email = counter === 0 ? `${baseEmail}@teamtime.com` : `${baseEmail}${counter}@teamtime.com`;
 
             logger.info(`    Generando email base: ${baseEmail}, contador inicial: ${counter}, email: ${email}`);
 
@@ -1045,7 +1196,7 @@ class ExcelImportService {
             while (emailExists) {
                 logger.info(`    Email ${email} ya existe (${emailExists.id}), incrementando contador`);
                 counter++;
-                email = `${baseEmail}${counter}@imported.com`;
+                email = `${baseEmail}${counter}@teamtime.com`;
                 emailExists = await prisma.user.findUnique({ where: { email } });
             }
 
@@ -1061,16 +1212,21 @@ class ExcelImportService {
                         firstName,
                         lastName,
                         role: defaultRole,
+                        areaId: this.projectAreaId, // Asignar al área del proyecto
                         isActive: true
                     }
                 });
 
-                logger.info(`Usuario creado secuencialmente: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email}`);
+                logger.info(`Usuario creado secuencialmente: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email} - Área: ${this.projectAreaId}`);
+                
+                // Asignar automáticamente al proyecto general de su área
+                await this.assignUserToAreaGeneralProject(user.id, this.projectAreaId);
+                
             } catch (error) {
                 // Si aún hay error de duplicado, usar timestamp
                 if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
                     const timestamp = Date.now();
-                    const timestampEmail = `${baseEmail}.${timestamp}@imported.com`;
+                    const timestampEmail = `${baseEmail}.${timestamp}@teamtime.com`;
 
                     const hashedPassword = await bcrypt.hash('temp_password123', 10);
                     user = await prisma.user.create({
@@ -1080,11 +1236,16 @@ class ExcelImportService {
                             firstName,
                             lastName,
                             role: defaultRole,
+                            areaId: this.projectAreaId, // Asignar al área del proyecto
                             isActive: true
                         }
                     });
 
-                    logger.info(`Usuario creado con timestamp: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email}`);
+                    logger.info(`Usuario creado con timestamp: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email} - Área: ${this.projectAreaId}`);
+                    
+                    // Asignar automáticamente al proyecto general de su área
+                    await this.assignUserToAreaGeneralProject(user.id, this.projectAreaId);
+                    
                 } else {
                     throw error;
                 }
@@ -1273,6 +1434,312 @@ class ExcelImportService {
         if (Array.isArray(value)) return value;
 
         return String(value).split(/[;,]/).map(s => s.trim()).filter(s => s.length > 0);
+    }
+
+    /**
+     * Crear tareas estándar para proyecto importado
+     * @param {string} projectId - ID del proyecto
+     * @param {string} createdByUserId - ID del usuario que crea las tareas (opcional)
+     * @returns {Promise<Array>}
+     */
+    async createStandardProjectTasks(projectId, createdByUserId = null) {
+        try {
+            logger.info(`Iniciando creación de tareas estándar para proyecto: ${projectId}`);
+            
+            // Obtener información del usuario para pasar al ProjectService
+            const userInfo = await prisma.user.findUnique({
+                where: { id: createdByUserId },
+                select: { id: true, email: true, role: true, areaId: true }
+            });
+
+            if (!userInfo) {
+                logger.error(`Usuario ${createdByUserId} no encontrado para crear tareas estándar`);
+                return [];
+            }
+
+            // Crear objeto usuario completo para el ProjectService
+            const requestingUser = {
+                userId: userInfo.id,
+                email: userInfo.email,
+                role: userInfo.role,
+                areaId: userInfo.areaId
+            };
+            
+            // Verificar si el proyecto ya tiene tareas estándar
+            const standardTasksInfo = await this.projectService.hasStandardTasks(projectId, requestingUser);
+            logger.info(`¿Proyecto ${projectId} ya tiene tareas estándar? ${standardTasksInfo.hasStandardTasks} (${standardTasksInfo.existingStandardTasks.length}/5)`);
+            
+            if (standardTasksInfo.hasStandardTasks) {
+                logger.info(`Proyecto ${projectId} ya tiene tareas estándar, omitiendo creación`);
+                return [];
+            }
+
+            // Crear las tareas estándar usando el servicio de proyecto
+            logger.info(`Creando tareas estándar para proyecto ${projectId} con usuario ${createdByUserId}`);
+            const standardTasks = await this.projectService.createStandardTasks(projectId, requestingUser);
+            
+            logger.info(`${standardTasks.length} tareas estándar creadas para proyecto ${projectId}`);
+            return standardTasks;
+            
+        } catch (error) {
+            logger.error(`Error creando tareas estándar para proyecto ${projectId}:`, error);
+            // No lanzar error para no interrumpir la importación del proyecto
+            return [];
+        }
+    }
+
+    /**
+     * Manejar asignaciones al proyecto general del área
+     * @param {string} areaId - ID del área
+     * @param {Object} excelProject - Datos del proyecto Excel
+     * @param {string} requestingUserId - ID del usuario que realiza la importación
+     * @returns {Promise<void>}
+     */
+    async handleGeneralProjectAssignments(areaId, excelProject, requestingUserId) {
+        try {
+            // Obtener información del área
+            const area = await prisma.area.findUnique({
+                where: { id: areaId },
+                select: { id: true, name: true }
+            });
+
+            if (!area) {
+                logger.error(`Área con ID ${areaId} no encontrada`);
+                return;
+            }
+
+            // Obtener información completa del usuario solicitante
+            const requestingUserInfo = await prisma.user.findUnique({
+                where: { id: requestingUserId },
+                select: { id: true, email: true, role: true, areaId: true }
+            });
+
+            if (!requestingUserInfo) {
+                logger.error(`Usuario solicitante ${requestingUserId} no encontrado`);
+                return;
+            }
+
+            // Crear objeto usuario para el ProjectService
+            const requestingUser = {
+                userId: requestingUserInfo.id,
+                email: requestingUserInfo.email,
+                role: requestingUserInfo.role,
+                areaId: requestingUserInfo.areaId
+            };
+
+            // Crear o obtener el proyecto general del área
+            const generalProject = await this.projectService.createOrGetGeneralProject(
+                areaId, 
+                area.name, 
+                null, // projectName - usar default
+                null, // tasks - usar default
+                requestingUser
+            );
+            
+            // Recopilar usuarios a asignar al proyecto general
+            const usersToAssign = [];
+            
+            if (excelProject.coordinatorId) {
+                usersToAssign.push(excelProject.coordinatorId);
+            }
+            
+            if (excelProject.mentorId) {
+                usersToAssign.push(excelProject.mentorId);
+            }
+            
+            // Asignar usuarios al proyecto general (evitar duplicados)
+            const uniqueUsers = [...new Set(usersToAssign)];
+            
+            for (const userId of uniqueUsers) {
+                try {
+                    await this.projectService.assignUserToProject(generalProject.id, userId, requestingUserId);
+                    logger.info(`Usuario ${userId} asignado al proyecto general del área ${areaId}`);
+                } catch (error) {
+                    logger.warn(`No se pudo asignar usuario ${userId} al proyecto general: ${error.message}`);
+                }
+            }
+            
+        } catch (error) {
+            logger.error(`Error manejando asignaciones del proyecto general para área ${areaId}:`, error);
+            // No lanzar error para no interrumpir la importación
+        }
+    }
+
+    /**
+     * Crear múltiples tareas predeterminadas para un proyecto
+     * @param {string} projectId - ID del proyecto
+     * @param {string} createdByUserId - ID del usuario que crea las tareas (opcional)
+     * @param {Array} taskTemplates - Array de plantillas de tareas
+     * @returns {Promise<Array>}
+     */
+    async createProjectTasks(projectId, createdByUserId = null, taskTemplates = []) {
+        const defaultTemplates = [
+            {
+                title: 'Actividades del proyecto',
+                description: 'Tarea general para actividades del proyecto',
+                priority: 'MEDIUM',
+                tags: ['general']
+            },
+            {
+                title: 'Revisión de requerimientos',
+                description: 'Validar y documentar requerimientos del proyecto',
+                priority: 'HIGH',
+                tags: ['análisis', 'requerimientos']
+            },
+            {
+                title: 'Seguimiento de avances',
+                description: 'Monitoreo periódico del progreso del proyecto',
+                priority: 'MEDIUM',
+                tags: ['seguimiento', 'monitoreo']
+            }
+        ];
+
+        const templates = taskTemplates.length > 0 ? taskTemplates : [defaultTemplates[0]]; // Solo la primera por defecto
+        const createdTasks = [];
+
+        for (const template of templates) {
+            try {
+                const task = await prisma.task.create({
+                    data: {
+                        title: template.title,
+                        description: template.description || null,
+                        projectId: projectId,
+                        status: template.status || 'TODO',
+                        priority: template.priority || 'MEDIUM',
+                        createdBy: createdByUserId,
+                        tags: template.tags || ['importado'],
+                        estimatedHours: template.estimatedHours || null,
+                        dueDate: template.dueDate || null
+                    }
+                });
+
+                createdTasks.push(task);
+                logger.info(`Tarea creada: ${task.title} para proyecto ${projectId}`);
+            } catch (error) {
+                logger.error(`Error creando tarea "${template.title}" para proyecto ${projectId}:`, error);
+            }
+        }
+
+        return createdTasks;
+    }
+
+    /**
+     * Buscar usuario existente por nombre con lógica mejorada para evitar duplicados
+     * @param {string} firstName 
+     * @param {string} lastName 
+     * @returns {Promise<Object|null>}
+     */
+    async findExistingUserByName(firstName, lastName) {
+        // Estrategia 1: Búsqueda exacta (case insensitive)
+        let user = await prisma.user.findFirst({
+            where: {
+                AND: [
+                    { firstName: { equals: firstName, mode: 'insensitive' } },
+                    { lastName: { equals: lastName, mode: 'insensitive' } }
+                ]
+            }
+        });
+
+        if (user) {
+            logger.info(`    Encontrado con búsqueda exacta: ${user.firstName} ${user.lastName}`);
+            return user;
+        }
+
+        // Estrategia 2: Búsqueda por email generado (para usuarios ya importados)
+        const baseEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+        const possibleEmails = [
+            `${baseEmail}@teamtime.com`,
+            `${baseEmail}@imported.com`,
+            `${baseEmail}1@teamtime.com`,
+            `${baseEmail}2@teamtime.com`
+        ];
+
+        user = await prisma.user.findFirst({
+            where: {
+                email: { in: possibleEmails }
+            }
+        });
+
+        if (user) {
+            logger.info(`    Encontrado por email generado: ${user.firstName} ${user.lastName} (${user.email})`);
+            return user;
+        }
+
+        // Estrategia 3: Búsqueda parcial para variaciones de nombres
+        const firstNameVariations = [
+            firstName,
+            firstName.split(' ')[0], // Solo el primer nombre si tiene espacios
+        ];
+
+        const lastNameVariations = [
+            lastName,
+            lastName.split(' ').slice(0, 2).join(' '), // Solo los primeros dos apellidos
+        ];
+
+        for (const fName of firstNameVariations) {
+            for (const lName of lastNameVariations) {
+                if (fName && lName) {
+                    user = await prisma.user.findFirst({
+                        where: {
+                            AND: [
+                                { firstName: { contains: fName, mode: 'insensitive' } },
+                                { lastName: { contains: lName, mode: 'insensitive' } }
+                            ]
+                        }
+                    });
+
+                    if (user) {
+                        logger.info(`    Encontrado con búsqueda parcial: ${user.firstName} ${user.lastName} (variación de "${firstName} ${lastName}")`);
+                        return user;
+                    }
+                }
+            }
+        }
+
+        logger.info(`    No se encontró usuario existente para: ${firstName} ${lastName}`);
+        return null;
+    }
+
+    /**
+     * Asignar usuario al proyecto general de su área
+     * @param {string} userId - ID del usuario 
+     * @param {string} areaId - ID del área
+     * @returns {Promise<void>}
+     */
+    async assignUserToAreaGeneralProject(userId, areaId) {
+        try {
+            if (!userId || !areaId) {
+                return;
+            }
+
+            // Obtener información del área
+            const area = await prisma.area.findUnique({
+                where: { id: areaId },
+                select: { id: true, name: true }
+            });
+
+            if (!area) {
+                logger.error(`Área con ID ${areaId} no encontrada`);
+                return;
+            }
+
+            // Crear o obtener el proyecto general del área
+            const generalProject = await this.projectService.createOrGetGeneralProject(
+                areaId,
+                area.name,
+                null, // projectName - usar default
+                null, // tasks - usar default
+                this.requestingUser
+            );
+            
+            // Asignar usuario al proyecto general
+            await this.projectService.assignUserToProject(generalProject.id, userId, this.requestingUser.userId);
+            
+            logger.info(`Usuario ${userId} asignado automáticamente al proyecto general del área ${areaId}`);
+            
+        } catch (error) {
+            logger.warn(`No se pudo asignar usuario ${userId} al proyecto general del área ${areaId}: ${error.message}`);
+        }
     }
 }
 

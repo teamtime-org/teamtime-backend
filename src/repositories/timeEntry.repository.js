@@ -1,5 +1,5 @@
 const prisma = require('../config/database');
-const { getTimePeriodForDate } = require('../utils/dateUtils');
+const { getTimePeriodForDate, parseDateOnly } = require('../utils/dateUtils');
 
 /**
  * Repositorio para operaciones de entrada de tiempo
@@ -68,33 +68,36 @@ class TimeEntryRepository {
      * @returns {Promise<Object>}
      */
     async create(entryData) {
-        // Obtener el período de tiempo correspondiente
-        const periodInfo = getTimePeriodForDate(entryData.date);
+        // Convertir string date a Date object para Prisma
+        const dateForDB = new Date(entryData.date + 'T00:00:00.000Z');
 
-        // Buscar o crear el período
+        // Buscar el período por rango de fechas (más preciso que el cálculo fijo)
         let timePeriod = await prisma.timePeriod.findFirst({
             where: {
-                year: periodInfo.year,
-                month: periodInfo.month,
-                periodNumber: periodInfo.periodNumber,
+                startDate: {
+                    lte: dateForDB,
+                },
+                endDate: {
+                    gte: dateForDB,
+                },
+                isActive: true,
             },
         });
 
         if (!timePeriod) {
-            timePeriod = await prisma.timePeriod.create({
-                data: {
-                    year: periodInfo.year,
-                    month: periodInfo.month,
-                    periodNumber: periodInfo.periodNumber,
-                    startDate: periodInfo.startDate,
-                    endDate: periodInfo.endDate,
-                },
-            });
+            // En lugar de crear automáticamente, lanzar error informativo
+            const dateStr = entryData.date;
+            throw new Error(`No existe un período de tiempo configurado para la fecha ${dateStr}. Por favor contacte al administrador para que configure los períodos de tiempo necesarios antes de registrar horas.`);
         }
+
+        // Extraer solo los campos que corresponden al modelo de base de datos
+        const { year, month, day, date, ...dbFields } = entryData;
+
 
         return await prisma.timeEntry.create({
             data: {
-                ...entryData,
+                ...dbFields,
+                date: dateForDB,
                 timePeriodId: timePeriod.id,
             },
             include: {
@@ -136,36 +139,16 @@ class TimeEntryRepository {
      * @returns {Promise<Object>}
      */
     async update(id, updateData) {
-        // Si se actualiza la fecha, recalcular el período
-        if (updateData.date) {
-            const periodInfo = getTimePeriodForDate(updateData.date);
+        // En update solo se permiten cambios a horas y descripción
+        // No se recalcula período ni fecha
 
-            let timePeriod = await prisma.timePeriod.findFirst({
-                where: {
-                    year: periodInfo.year,
-                    month: periodInfo.month,
-                    periodNumber: periodInfo.periodNumber,
-                },
-            });
+        // Extraer solo los campos que se pueden actualizar
+        const { year, month, day, userId, projectId, taskId, date, timePeriodId, ...dbFields } = updateData;
 
-            if (!timePeriod) {
-                timePeriod = await prisma.timePeriod.create({
-                    data: {
-                        year: periodInfo.year,
-                        month: periodInfo.month,
-                        periodNumber: periodInfo.periodNumber,
-                        startDate: periodInfo.startDate,
-                        endDate: periodInfo.endDate,
-                    },
-                });
-            }
-
-            updateData.timePeriodId = timePeriod.id;
-        }
 
         return await prisma.timeEntry.update({
             where: { id },
-            data: updateData,
+            data: dbFields,
             include: {
                 user: {
                     select: {
@@ -201,65 +184,44 @@ class TimeEntryRepository {
     async findMany(filters = {}, pagination = {}, userRole = null, userId = null) {
         const where = {};
 
-        // Aplicar filtros de acceso por rol
-        if (userRole === 'COORDINADOR') {
-            // Los coordinadores ven entradas de proyectos que crearon
-            where.project = {
-                createdBy: userId,
-            };
-        } else if (userRole === 'COLABORADOR') {
-            // Los colaboradores solo ven sus propias entradas
-            where.userId = userId;
-        }
 
-        // Aplicar filtros adicionales
-        if (filters.userId && userRole === 'ADMINISTRADOR') {
-            where.userId = filters.userId;
-        }
+        // Los usuarios solo ven sus propias entradas
+        where.userId = userId;
 
-        if (filters.projectId) {
-            where.projectId = filters.projectId;
-        }
 
-        if (filters.taskId) {
-            where.taskId = filters.taskId;
-        }
+        // if (filters.projectId) {
+        //     where.projectId = filters.projectId;
+        // }
 
-        if (filters.timePeriodId) {
-            where.timePeriodId = filters.timePeriodId;
-        }
+        // if (filters.taskId) {
+        //     where.taskId = filters.taskId;
+        // }
+
+        // if (filters.timePeriodId) {
+        //     where.timePeriodId = filters.timePeriodId;
+        // }
 
         if (filters.startDate || filters.endDate) {
             where.date = {};
             if (filters.startDate) {
-                where.date.gte = new Date(filters.startDate);
+                // Asumir que filters.startDate es string YYYY-MM-DD
+                where.date.gte = new Date(`${filters.startDate}T00:00:00.000Z`);
             }
             if (filters.endDate) {
-                where.date.lte = new Date(filters.endDate);
+                where.date.lte = new Date(`${filters.endDate}T23:59:59.999Z`);
             }
         }
 
-        if (filters.isApproved !== undefined) {
-            where.isApproved = filters.isApproved;
-        }
 
-        if (filters.pendingApproval) {
-            where.isApproved = false;
-        }
+        // if (filters.isApproved !== undefined) {
+        //     where.isApproved = filters.isApproved;
+        // }
 
-        if (filters.myEntries && userId) {
-            where.userId = userId;
-        }
+        // if (filters.pendingApproval) {
+        //     where.isApproved = false;
+        // }
 
-        if (filters.minHours || filters.maxHours) {
-            where.hours = {};
-            if (filters.minHours) {
-                where.hours.gte = filters.minHours;
-            }
-            if (filters.maxHours) {
-                where.hours.lte = filters.maxHours;
-            }
-        }
+
 
         // Configurar ordenamiento
         const orderBy = {};
@@ -292,50 +254,7 @@ class TimeEntryRepository {
             where,
             skip: pagination.skip || 0,
             take: pagination.limit || 10,
-            orderBy,
-            include: {
-                user: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                    },
-                },
-                project: {
-                    select: {
-                        id: true,
-                        name: true,
-                        area: {
-                            select: {
-                                id: true,
-                                name: true,
-                                color: true,
-                            },
-                        },
-                    },
-                },
-                task: {
-                    select: {
-                        id: true,
-                        title: true,
-                    },
-                },
-                timePeriod: {
-                    select: {
-                        id: true,
-                        year: true,
-                        month: true,
-                        periodNumber: true,
-                    },
-                },
-                approver: {
-                    select: {
-                        id: true,
-                        firstName: true,
-                        lastName: true,
-                    },
-                },
-            },
+            orderBy
         });
 
         return { timeEntries, total };
@@ -385,11 +304,23 @@ class TimeEntryRepository {
      * @returns {Promise<boolean>}
      */
     async existsDuplicate(userId, projectId, taskId, date, excludeId = null) {
+        // date ya es un Date object, crear rango del día
+        const dateObj = new Date(date);
+        const year = dateObj.getUTCFullYear();
+        const month = dateObj.getUTCMonth();
+        const day = dateObj.getUTCDate();
+
+        const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
+        const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+
         const where = {
             userId,
             projectId,
             taskId,
-            date,
+            date: {
+                gte: startOfDay,
+                lte: endOfDay
+            },
         };
 
         if (excludeId) {
@@ -409,11 +340,23 @@ class TimeEntryRepository {
      * @returns {Promise<Object|null>}
      */
     async findDuplicate(userId, projectId, taskId, date) {
+        // date ya es un Date object, crear rango del día
+        const dateObj = new Date(date);
+        const year = dateObj.getUTCFullYear();
+        const month = dateObj.getUTCMonth();
+        const day = dateObj.getUTCDate();
+
+        const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
+        const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+
         const where = {
             userId,
             projectId,
             taskId,
-            date,
+            date: {
+                gte: startOfDay,
+                lte: endOfDay
+            },
         };
 
         return await prisma.timeEntry.findFirst({
@@ -465,9 +408,21 @@ class TimeEntryRepository {
      * @returns {Promise<Object>}
      */
     async checkDailyHoursLimit(userId, date, newHours, excludeId = null) {
+        // date ya es un Date object, crear rango del día
+        const dateObj = new Date(date);
+        const year = dateObj.getUTCFullYear();
+        const month = dateObj.getUTCMonth();
+        const day = dateObj.getUTCDate();
+
+        const startOfDay = new Date(Date.UTC(year, month, day, 0, 0, 0));
+        const endOfDay = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
+
         const where = {
             userId,
-            date,
+            date: {
+                gte: startOfDay,
+                lte: endOfDay
+            },
         };
 
         if (excludeId) {
@@ -479,12 +434,13 @@ class TimeEntryRepository {
             _sum: { hours: true },
         });
 
-        const currentHours = result._sum.hours || 0;
-        const totalHours = currentHours + newHours;
+        const currentHours = parseFloat(result._sum.hours || 0);
+        const newHoursFloat = parseFloat(newHours);
+        const totalHours = currentHours + newHoursFloat;
 
         return {
             currentHours,
-            newHours,
+            newHours: newHoursFloat,
             totalHours,
             isValid: totalHours <= 24,
         };

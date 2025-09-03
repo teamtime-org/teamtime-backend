@@ -54,7 +54,13 @@ class TaskController {
                 priority,
                 projectId,
                 assignedTo,
-                dueDate
+                dueDate,
+                areaId,
+                projectStatus,
+                assignedUserId,
+                mentorId,
+                coordinatorId,
+                siebelOrderNumber
             } = req.query;
 
             // Validar límites de paginación
@@ -68,15 +74,31 @@ class TaskController {
             if (projectId) filters.projectId = projectId;
             if (assignedTo) filters.assignedTo = assignedTo;
             if (dueDate) filters.dueDate = dueDate;
+            if (areaId) filters.areaId = areaId;
+            if (projectStatus) filters.projectStatus = projectStatus;
+            if (assignedUserId) filters.assignedUserId = assignedUserId;
+            if (mentorId) filters.mentorId = mentorId;
+            if (coordinatorId) filters.coordinatorId = coordinatorId;
+            if (siebelOrderNumber) filters.siebelOrderNumber = siebelOrderNumber;
 
             const pagination = {
                 page: pageNumber,
-                limit: pageSize
+                limit: pageSize,
+                skip: (pageNumber - 1) * pageSize
             };
 
             const result = await this.taskService.getTasks(filters, pagination, req.user);
 
-            return ApiResponse.success(res, result, 'Tareas obtenidas exitosamente');
+            // Formatear respuesta con paginación
+            const response = {
+                tasks: result.tasks,
+                page: pageNumber,
+                limit: pageSize,
+                total: result.total,
+                totalPages: Math.ceil(result.total / pageSize)
+            };
+
+            return ApiResponse.success(res, response, 'Tareas obtenidas exitosamente');
         } catch (error) {
             logger.error('Error al obtener tareas:', error);
             return ApiResponse.error(res, error.message, 400);

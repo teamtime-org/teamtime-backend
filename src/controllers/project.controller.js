@@ -55,13 +55,17 @@ class ProjectController {
                 areaId,
                 startDate,
                 endDate,
+                // Filtro de asignaciones
+                assignedUserId,
+                assigned,
                 // Nuevos filtros de Excel
                 mentorId,
                 coordinatorId,
                 salesExecutiveId,
                 salesManagementId,
                 siebelOrderNumber,
-                projectType
+                projectType,
+                isGeneral
             } = req.query;
 
             // Validar límites de paginación
@@ -76,6 +80,10 @@ class ProjectController {
             if (startDate) filters.startDate = startDate;
             if (endDate) filters.endDate = endDate;
 
+            // Filtros de asignaciones
+            if (assignedUserId) filters.assignedUserId = assignedUserId;
+            if (assigned === 'true' || assigned === true) filters.assigned = true;
+
             // Filtros específicos de Excel
             if (mentorId) filters.mentorId = mentorId;
             if (coordinatorId) filters.coordinatorId = coordinatorId;
@@ -83,15 +91,26 @@ class ProjectController {
             if (salesManagementId) filters.salesManagementId = salesManagementId;
             if (siebelOrderNumber) filters.siebelOrderNumber = siebelOrderNumber;
             if (projectType) filters.projectType = projectType;
+            if (isGeneral !== undefined) filters.isGeneral = isGeneral === 'true';
 
             const pagination = {
                 page: pageNumber,
-                limit: pageSize
+                limit: pageSize,
+                skip: (pageNumber - 1) * pageSize
             };
 
             const result = await this.projectService.getProjects(filters, pagination, req.user);
 
-            return ApiResponse.success(res, result, 'Proyectos obtenidos exitosamente');
+            // Formatear respuesta con paginación
+            const response = {
+                projects: result.projects,
+                page: pageNumber,
+                limit: pageSize,
+                total: result.total,
+                totalPages: Math.ceil(result.total / pageSize)
+            };
+
+            return ApiResponse.success(res, response, 'Proyectos obtenidos exitosamente');
         } catch (error) {
             logger.error('Error al obtener proyectos:', error);
             return ApiResponse.error(res, error.message, 400);
@@ -233,6 +252,106 @@ class ProjectController {
         } catch (error) {
             logger.error('Error al obtener estadísticas del proyecto:', error);
             return ApiResponse.error(res, error.message, 400);
+        }
+    };
+
+    /**
+     * Crear tareas estándar para un proyecto
+     */
+    createStandardTasks = async (req, res) => {
+        try {
+            const { projectId } = req.body;
+            const tasks = await this.projectService.createStandardTasks(projectId, req.user);
+
+            logger.info(`Tareas estándar creadas para proyecto ${projectId} por ${req.user.email}`);
+            return ApiResponse.success(res, tasks, 'Tareas estándar creadas exitosamente', 201);
+        } catch (error) {
+            logger.error('Error al crear tareas estándar:', error);
+            return ApiResponse.error(res, error.message, 400);
+        }
+    };
+
+    /**
+     * Verificar si un proyecto tiene tareas estándar
+     */
+    hasStandardTasks = async (req, res) => {
+        try {
+            const { id } = req.params;
+            const result = await this.projectService.hasStandardTasks(id, req.user);
+
+            return ApiResponse.success(res, result, 'Verificación de tareas estándar completada');
+        } catch (error) {
+            logger.error('Error al verificar tareas estándar:', error);
+            return ApiResponse.error(res, error.message, 400);
+        }
+    };
+
+    /**
+     * Crear o obtener proyecto general de un área
+     */
+    createOrGetGeneralProject = async (req, res) => {
+        try {
+            const { areaId, areaName, projectName, tasks } = req.body;
+            const project = await this.projectService.createOrGetGeneralProject(
+                areaId, 
+                areaName, 
+                projectName, 
+                tasks, 
+                req.user
+            );
+
+            logger.info(`Proyecto general creado/obtenido para área ${areaId} por ${req.user.email}`);
+            return ApiResponse.success(res, project, 'Proyecto general procesado exitosamente', 201);
+        } catch (error) {
+            logger.error('Error al crear/obtener proyecto general:', error);
+            return ApiResponse.error(res, error.message, 400);
+        }
+    };
+
+    /**
+     * Asignar usuario al proyecto general de su área
+     */
+    assignToGeneralProject = async (req, res) => {
+        try {
+            const { userId, areaId } = req.body;
+            const result = await this.projectService.assignUserToGeneralProject(userId, areaId, req.user);
+
+            logger.info(`Usuario ${userId} asignado al proyecto general del área ${areaId} por ${req.user.email}`);
+            return ApiResponse.success(res, result, 'Usuario asignado al proyecto general exitosamente');
+        } catch (error) {
+            logger.error('Error al asignar usuario al proyecto general:', error);
+            return ApiResponse.error(res, error.message, 400);
+        }
+    };
+
+    /**
+     * Asignar múltiples usuarios al proyecto general de su área
+     */
+    assignUsersToGeneralProject = async (req, res) => {
+        try {
+            const { userIds, areaId } = req.body;
+            const result = await this.projectService.assignUsersToGeneralProject(userIds, areaId, req.user);
+
+            logger.info(`${userIds.length} usuarios asignados al proyecto general del área ${areaId} por ${req.user.email}`);
+            return ApiResponse.success(res, result, 'Usuarios asignados al proyecto general exitosamente');
+        } catch (error) {
+            logger.error('Error al asignar usuarios al proyecto general:', error);
+            return ApiResponse.error(res, error.message, 400);
+        }
+    };
+
+    /**
+     * Obtener proyecto general de un área
+     */
+    getGeneralProjectByArea = async (req, res) => {
+        try {
+            const { areaId } = req.params;
+            const project = await this.projectService.getGeneralProjectByArea(areaId, req.user);
+
+            return ApiResponse.success(res, project, 'Proyecto general obtenido exitosamente');
+        } catch (error) {
+            logger.error('Error al obtener proyecto general:', error);
+            return ApiResponse.error(res, error.message, 404);
         }
     };
 }

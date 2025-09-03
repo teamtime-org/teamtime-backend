@@ -289,4 +289,68 @@ router.get('/:id/stats',
     projectController.getProjectStats
 );
 
+/**
+ * @route   POST /api/projects/create-standard-tasks
+ * @desc    Crear tareas estándar para un proyecto
+ * @access  Private (Administrador/Coordinador)
+ */
+router.post('/create-standard-tasks',
+    authenticateToken,
+    requireRole([USER_ROLES.ADMINISTRADOR, USER_ROLES.COORDINADOR]),
+    projectController.createStandardTasks
+);
+
+/**
+ * @route   GET /api/projects/:id/has-standard-tasks
+ * @desc    Verificar si un proyecto tiene tareas estándar
+ * @access  Private
+ */
+router.get('/:id/has-standard-tasks',
+    authenticateToken,
+    projectController.hasStandardTasks
+);
+
+/**
+ * @route   POST /api/projects/create-general-project
+ * @desc    Crear o obtener proyecto general de un área
+ * @access  Private (Administrador/Coordinador)
+ */
+router.post('/create-general-project',
+    authenticateToken,
+    requireRole([USER_ROLES.ADMINISTRADOR, USER_ROLES.COORDINADOR]),
+    projectController.createOrGetGeneralProject
+);
+
+/**
+ * @route   POST /api/projects/assign-to-general-project
+ * @desc    Asignar usuario al proyecto general de su área
+ * @access  Private (Administrador/Coordinador)
+ */
+router.post('/assign-to-general-project',
+    authenticateToken,
+    requireRole([USER_ROLES.ADMINISTRADOR, USER_ROLES.COORDINADOR]),
+    projectController.assignToGeneralProject
+);
+
+/**
+ * @route   POST /api/projects/assign-users-to-general-project
+ * @desc    Asignar múltiples usuarios al proyecto general de su área
+ * @access  Private (Administrador/Coordinador)
+ */
+router.post('/assign-users-to-general-project',
+    authenticateToken,
+    requireRole([USER_ROLES.ADMINISTRADOR, USER_ROLES.COORDINADOR]),
+    projectController.assignUsersToGeneralProject
+);
+
+/**
+ * @route   GET /api/projects/general-project/:areaId
+ * @desc    Obtener proyecto general de un área
+ * @access  Private
+ */
+router.get('/general-project/:areaId',
+    authenticateToken,
+    projectController.getGeneralProjectByArea
+);
+
 module.exports = router;

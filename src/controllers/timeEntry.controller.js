@@ -16,6 +16,7 @@ class TimeEntryController {
      */
     createTimeEntry = async (req, res) => {
         try {
+            logger.info(`[TimeEntry Creation] User: ${req.user?.email || 'unknown'}, Body: ${JSON.stringify(req.body)}`);
             const timeEntry = await this.timeEntryService.createTimeEntry(req.body, req.user);
 
             logger.info(`Registro de tiempo creado: ${timeEntry.hours}h por ${req.user.email}`);
@@ -73,6 +74,13 @@ class TimeEntryController {
             };
 
             const result = await this.timeEntryService.getTimeEntries(filters, pagination, req.user);
+
+            // Deshabilitar caché para asegurar datos actualizados
+            res.set({
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
 
             return ApiResponse.success(res, result, 'Registros de tiempo obtenidos exitosamente');
         } catch (error) {

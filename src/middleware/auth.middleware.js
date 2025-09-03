@@ -38,6 +38,7 @@ const authenticateToken = (req, res, next) => {
                 role: decoded.role,
                 areaId: decoded.areaId,
             };
+            
 
             logger.debug('Usuario autenticado', {
                 userId: req.user.userId,

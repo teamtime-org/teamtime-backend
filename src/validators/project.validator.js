@@ -67,6 +67,12 @@ const createProjectSchema = Joi.object({
             'number.precision': 'Las horas estimadas pueden tener máximo 2 decimales',
             'number.max': 'Las horas estimadas no pueden ser mayores a 99999.99',
         }),
+
+    isGeneral: Joi.boolean()
+        .default(false)
+        .messages({
+            'boolean.base': 'isGeneral debe ser verdadero o falso',
+        }),
 });
 
 // Esquema para actualización de proyecto
@@ -130,6 +136,11 @@ const updateProjectSchema = Joi.object({
     isActive: Joi.boolean()
         .messages({
             'boolean.base': 'El estado activo debe ser verdadero o falso',
+        }),
+
+    isGeneral: Joi.boolean()
+        .messages({
+            'boolean.base': 'isGeneral debe ser verdadero o falso',
         }),
 });
 
@@ -220,6 +231,11 @@ const projectFiltersSchema = Joi.object({
             'number.integer': 'El límite debe ser un número entero',
             'number.min': 'El límite debe ser mayor a 0',
             'number.max': 'El límite no puede ser mayor a 100',
+        }),
+
+    isGeneral: Joi.boolean()
+        .messages({
+            'boolean.base': 'isGeneral debe ser verdadero o falso',
         }),
 });
 

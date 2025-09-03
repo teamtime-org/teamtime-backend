@@ -273,6 +273,25 @@ router.put('/profile', authenticateToken, validate(updateProfileSchema), authCon
 router.post('/change-password', authenticateToken, validate(changePasswordSchema), authController.changePassword);
 
 /**
+ * @route   GET /api/auth/debug-user
+ * @desc    Debug endpoint to verify user data
+ * @access  Private
+ */
+router.get('/debug-user',
+    authenticateToken,
+    (req, res) => {
+        return res.json({
+            success: true,
+            data: {
+                middleware_user: req.user,
+                token_decoded: req.headers.authorization,
+                timestamp: new Date().toISOString()
+            }
+        });
+    }
+);
+
+/**
  * @swagger
  * /auth/logout:
  *   post:
