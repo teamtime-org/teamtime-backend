@@ -91,7 +91,7 @@ class ExcelImportService {
             if (!userExists) {
                 // Por seguridad, si el userId del token no existe, invalidar la sesión
                 logger.error(`Token de seguridad inválido: Usuario con ID ${requestingUser.userId} no existe. Email del token: ${requestingUser.email}`);
-                
+
                 const error = new Error('Token de autenticación inválido. Por favor, inicie sesión nuevamente.');
                 error.statusCode = 401; // Unauthorized
                 error.code = 'INVALID_TOKEN';
@@ -205,7 +205,7 @@ class ExcelImportService {
         if (!userExists) {
             // Por seguridad, si el userId del token no existe, invalidar la sesión
             logger.error(`Token de seguridad inválido: Usuario con ID ${requestingUser.userId} no existe. Email del token: ${requestingUser.email}`);
-            
+
             const error = new Error('Token de autenticación inválido. Por favor, inicie sesión nuevamente.');
             error.statusCode = 401; // Unauthorized
             error.code = 'INVALID_TOKEN';
@@ -217,7 +217,7 @@ class ExcelImportService {
         this.projectAreaId = areaId;
 
         logger.info(`Procesando datos con usuario: ${requestingUser.email} (ID: ${requestingUser.userId}) - Área del proyecto: ${areaId}`);
-        
+
         // Crear un cache de usuarios para evitar duplicados
         this.userCache = new Map();
         this.emailCounter = new Map(); // Cache para contadores de emails
@@ -763,7 +763,7 @@ class ExcelImportService {
         if (!userExists) {
             // Por seguridad, si el userId del token no existe, invalidar la sesión
             logger.error(`Token de seguridad inválido: Usuario con ID ${effectiveUser.userId} no existe. Email del token: ${effectiveUser.email}`);
-            
+
             const error = new Error('Token de autenticación inválido. Por favor, inicie sesión nuevamente.');
             error.statusCode = 401; // Unauthorized
             error.code = 'INVALID_TOKEN';
@@ -876,13 +876,13 @@ class ExcelImportService {
      */
     async createProjectAssignments(projectId, excelProject, assignedByUserId) {
         const assignments = [];
-        
+
         try {
             // Eliminar asignaciones existentes para el proyecto
             await prisma.projectAssignment.updateMany({
-                where: { 
+                where: {
                     projectId: projectId,
-                    isActive: true 
+                    isActive: true
                 },
                 data: { isActive: false }
             });
@@ -990,8 +990,6 @@ class ExcelImportService {
             data.forEach(row => {
                 if (row.mentor) userNames.add(row.mentor);
                 if (row.coordinator) userNames.add(row.coordinator);
-                if (row.salesExecutive) userNames.add(row.salesExecutive);
-                if (row.designer) userNames.add(row.designer);
             });
 
             logger.info(`Pre-cargando ${userNames.size} usuarios únicos...`);
@@ -1049,14 +1047,6 @@ class ExcelImportService {
                 if (row.coordinator) usersToCreate.set(`${row.coordinator}-${USER_ROLES.COORDINADOR}`, {
                     userString: row.coordinator,
                     role: USER_ROLES.COORDINADOR
-                });
-                if (row.salesExecutive) usersToCreate.set(`${row.salesExecutive}-${USER_ROLES.COLABORADOR}`, {
-                    userString: row.salesExecutive,
-                    role: USER_ROLES.COLABORADOR
-                });
-                if (row.designer) usersToCreate.set(`${row.designer}-${USER_ROLES.COLABORADOR}`, {
-                    userString: row.designer,
-                    role: USER_ROLES.COLABORADOR
                 });
             });
 
@@ -1138,7 +1128,7 @@ class ExcelImportService {
 
         if (user) {
             logger.info(`    Usuario encontrado en BD: ${user.id} - ${user.email}`);
-            
+
             // Si el usuario existe pero no tiene área asignada, asignarle el área del proyecto
             if (!user.areaId && this.projectAreaId) {
                 try {
@@ -1152,18 +1142,18 @@ class ExcelImportService {
                     logger.warn(`    No se pudo asignar área a usuario ${user.id}: ${error.message}`);
                 }
             }
-            
+
             // Asignar usuario al proyecto general de su área (si tiene área)
             if (user.areaId || this.projectAreaId) {
                 await this.assignUserToAreaGeneralProject(user.id, user.areaId || this.projectAreaId);
             }
-            
+
             // Verificar si necesita actualizar email (si está usando email genérico importado)
             if (user.email.includes('@imported.com')) {
                 // Generar email más específico usando el proyecto actual
                 let baseEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
                 let newEmail = `${baseEmail}@teamtime.com`;
-                
+
                 // Verificar que el nuevo email no exista
                 const emailExists = await prisma.user.findUnique({ where: { email: newEmail } });
                 if (!emailExists && newEmail !== user.email) {
@@ -1218,10 +1208,10 @@ class ExcelImportService {
                 });
 
                 logger.info(`Usuario creado secuencialmente: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email} - Área: ${this.projectAreaId}`);
-                
+
                 // Asignar automáticamente al proyecto general de su área
                 await this.assignUserToAreaGeneralProject(user.id, this.projectAreaId);
-                
+
             } catch (error) {
                 // Si aún hay error de duplicado, usar timestamp
                 if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
@@ -1242,10 +1232,10 @@ class ExcelImportService {
                     });
 
                     logger.info(`Usuario creado con timestamp: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email} - Área: ${this.projectAreaId}`);
-                    
+
                     // Asignar automáticamente al proyecto general de su área
                     await this.assignUserToAreaGeneralProject(user.id, this.projectAreaId);
-                    
+
                 } else {
                     throw error;
                 }
@@ -1445,7 +1435,7 @@ class ExcelImportService {
     async createStandardProjectTasks(projectId, createdByUserId = null) {
         try {
             logger.info(`Iniciando creación de tareas estándar para proyecto: ${projectId}`);
-            
+
             // Obtener información del usuario para pasar al ProjectService
             const userInfo = await prisma.user.findUnique({
                 where: { id: createdByUserId },
@@ -1464,11 +1454,11 @@ class ExcelImportService {
                 role: userInfo.role,
                 areaId: userInfo.areaId
             };
-            
+
             // Verificar si el proyecto ya tiene tareas estándar
             const standardTasksInfo = await this.projectService.hasStandardTasks(projectId, requestingUser);
             logger.info(`¿Proyecto ${projectId} ya tiene tareas estándar? ${standardTasksInfo.hasStandardTasks} (${standardTasksInfo.existingStandardTasks.length}/5)`);
-            
+
             if (standardTasksInfo.hasStandardTasks) {
                 logger.info(`Proyecto ${projectId} ya tiene tareas estándar, omitiendo creación`);
                 return [];
@@ -1477,10 +1467,10 @@ class ExcelImportService {
             // Crear las tareas estándar usando el servicio de proyecto
             logger.info(`Creando tareas estándar para proyecto ${projectId} con usuario ${createdByUserId}`);
             const standardTasks = await this.projectService.createStandardTasks(projectId, requestingUser);
-            
+
             logger.info(`${standardTasks.length} tareas estándar creadas para proyecto ${projectId}`);
             return standardTasks;
-            
+
         } catch (error) {
             logger.error(`Error creando tareas estándar para proyecto ${projectId}:`, error);
             // No lanzar error para no interrumpir la importación del proyecto
@@ -1529,27 +1519,27 @@ class ExcelImportService {
 
             // Crear o obtener el proyecto general del área
             const generalProject = await this.projectService.createOrGetGeneralProject(
-                areaId, 
-                area.name, 
+                areaId,
+                area.name,
                 null, // projectName - usar default
                 null, // tasks - usar default
                 requestingUser
             );
-            
+
             // Recopilar usuarios a asignar al proyecto general
             const usersToAssign = [];
-            
+
             if (excelProject.coordinatorId) {
                 usersToAssign.push(excelProject.coordinatorId);
             }
-            
+
             if (excelProject.mentorId) {
                 usersToAssign.push(excelProject.mentorId);
             }
-            
+
             // Asignar usuarios al proyecto general (evitar duplicados)
             const uniqueUsers = [...new Set(usersToAssign)];
-            
+
             for (const userId of uniqueUsers) {
                 try {
                     await this.projectService.assignUserToProject(generalProject.id, userId, requestingUserId);
@@ -1558,7 +1548,7 @@ class ExcelImportService {
                     logger.warn(`No se pudo asignar usuario ${userId} al proyecto general: ${error.message}`);
                 }
             }
-            
+
         } catch (error) {
             logger.error(`Error manejando asignaciones del proyecto general para área ${areaId}:`, error);
             // No lanzar error para no interrumpir la importación
@@ -1731,12 +1721,12 @@ class ExcelImportService {
                 null, // tasks - usar default
                 this.requestingUser
             );
-            
+
             // Asignar usuario al proyecto general
             await this.projectService.assignUserToProject(generalProject.id, userId, this.requestingUser.userId);
-            
+
             logger.info(`Usuario ${userId} asignado automáticamente al proyecto general del área ${areaId}`);
-            
+
         } catch (error) {
             logger.warn(`No se pudo asignar usuario ${userId} al proyecto general del área ${areaId}: ${error.message}`);
         }

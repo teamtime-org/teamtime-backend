@@ -129,14 +129,24 @@ class UserRepository {
             ];
         }
 
+        // Configurar paginación
+        const page = pagination.page || 1;
+        const limit = pagination.limit || 10;
+        const skip = (page - 1) * limit;
+
         // Contar total
         const total = await prisma.user.count({ where });
+
+        // Calcular información de paginación
+        const totalPages = Math.ceil(total / limit);
+        const hasNextPage = page < totalPages;
+        const hasPreviousPage = page > 1;
 
         // Obtener usuarios
         const users = await prisma.user.findMany({
             where,
-            skip: pagination.skip || 0,
-            take: pagination.limit || 10,
+            skip: skip,
+            take: limit,
             orderBy: { createdAt: 'desc' },
             select: {
                 id: true,
@@ -156,7 +166,15 @@ class UserRepository {
             },
         });
 
-        return { users, total };
+        return { 
+            users, 
+            total,
+            page,
+            limit,
+            totalPages,
+            hasNextPage,
+            hasPreviousPage
+        };
     }
 
     /**
