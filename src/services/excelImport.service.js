@@ -1152,7 +1152,7 @@ class ExcelImportService {
             if (user.email.includes('@imported.com')) {
                 // Generar email más específico usando el proyecto actual
                 let baseEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
-                let newEmail = `${baseEmail}@teamtime.com`;
+                let newEmail = `${baseEmail}@${process.env.DEFAULT_EMAIL_DOMAIN || 'teamtime.com'}`;
 
                 // Verificar que el nuevo email no exista
                 const emailExists = await prisma.user.findUnique({ where: { email: newEmail } });
@@ -1177,7 +1177,8 @@ class ExcelImportService {
             // Generar email único
             let baseEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
             let counter = this.emailCounter.get(baseEmail) || 0;
-            let email = counter === 0 ? `${baseEmail}@teamtime.com` : `${baseEmail}${counter}@teamtime.com`;
+            const emailDomain = process.env.DEFAULT_EMAIL_DOMAIN || 'teamtime.com';
+            let email = counter === 0 ? `${baseEmail}@${emailDomain}` : `${baseEmail}${counter}@${emailDomain}`;
 
             logger.info(`    Generando email base: ${baseEmail}, contador inicial: ${counter}, email: ${email}`);
 
@@ -1186,7 +1187,7 @@ class ExcelImportService {
             while (emailExists) {
                 logger.info(`    Email ${email} ya existe (${emailExists.id}), incrementando contador`);
                 counter++;
-                email = `${baseEmail}${counter}@teamtime.com`;
+                email = `${baseEmail}${counter}@${emailDomain}`;
                 emailExists = await prisma.user.findUnique({ where: { email } });
             }
 
@@ -1194,7 +1195,8 @@ class ExcelImportService {
             this.emailCounter.set(baseEmail, counter + 1);
 
             try {
-                const hashedPassword = await bcrypt.hash('temp_password123', 10);
+                const tempPassword = process.env.DEFAULT_TEMP_PASSWORD || 'temp_password123';
+                const hashedPassword = await bcrypt.hash(tempPassword, 10);
                 user = await prisma.user.create({
                     data: {
                         email,
@@ -1216,9 +1218,11 @@ class ExcelImportService {
                 // Si aún hay error de duplicado, usar timestamp
                 if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
                     const timestamp = Date.now();
-                    const timestampEmail = `${baseEmail}.${timestamp}@teamtime.com`;
+                    const emailDomain = process.env.DEFAULT_EMAIL_DOMAIN || 'teamtime.com';
+                    const timestampEmail = `${baseEmail}.${timestamp}@${emailDomain}`;
 
-                    const hashedPassword = await bcrypt.hash('temp_password123', 10);
+                    const tempPassword = process.env.DEFAULT_TEMP_PASSWORD || 'temp_password123';
+                    const hashedPassword = await bcrypt.hash(tempPassword, 10);
                     user = await prisma.user.create({
                         data: {
                             email: timestampEmail,
@@ -1637,11 +1641,12 @@ class ExcelImportService {
 
         // Estrategia 2: Búsqueda por email generado (para usuarios ya importados)
         const baseEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+        const emailDomain = process.env.DEFAULT_EMAIL_DOMAIN || 'teamtime.com';
         const possibleEmails = [
-            `${baseEmail}@teamtime.com`,
+            `${baseEmail}@${emailDomain}`,
             `${baseEmail}@imported.com`,
-            `${baseEmail}1@teamtime.com`,
-            `${baseEmail}2@teamtime.com`
+            `${baseEmail}1@${emailDomain}`,
+            `${baseEmail}2@${emailDomain}`
         ];
 
         user = await prisma.user.findFirst({

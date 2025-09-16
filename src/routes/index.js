@@ -12,6 +12,7 @@ const excelProjectMigrationRoutes = require('./excelProjectMigration.routes');
 const excelImportRoutes = require('./excelImport.routes');
 const catalogRoutes = require('./catalog.routes');
 const systemConfigRoutes = require('./systemConfig.routes');
+const dashboardRoutes = require('./dashboard.routes');
 
 const router = express.Router();
 
@@ -71,6 +72,7 @@ router.use('/excel-projects', excelProjectMigrationRoutes);
 router.use('/excel-import', excelImportRoutes);
 router.use('/catalogs', catalogRoutes);
 router.use('/system-config', systemConfigRoutes);
+router.use('/dashboard', dashboardRoutes);
 
 // 404 handler for API routes
 router.use('*', (req, res) => {
