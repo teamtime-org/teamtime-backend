@@ -232,7 +232,21 @@ class TimeEntryService {
             const startDate = startOfDay(date);
             const endDate = endOfDay(date);
 
-            return await this.timeEntryRepository.findByDateRange(userId, startDate, endDate);
+            // Use findMany with date filters
+            const dateFilters = {
+                userId: userId,
+                startDate: startDate.toISOString().split('T')[0],
+                endDate: endDate.toISOString().split('T')[0]
+            };
+            
+            const result = await this.timeEntryRepository.findMany(
+                dateFilters,
+                { page: 1, limit: 1000 },
+                null, // userRole
+                userId
+            );
+            
+            return result;
         } catch (error) {
             logger.error('Error al obtener registros de tiempo por fecha:', error);
             throw error;
@@ -252,11 +266,18 @@ class TimeEntryService {
             // Aplicar filtros de usuario
             const userFilters = await this.applyUserFilters(filters, requestingUser);
 
-            return await this.timeEntryRepository.findByDateRange(
-                userFilters.userId,
-                startDate,
-                endDate,
-                userFilters
+            // Preparar filtros con fechas para findMany
+            const dateFilters = {
+                ...userFilters,
+                startDate: startDate.toISOString().split('T')[0], // Convert to YYYY-MM-DD string
+                endDate: endDate.toISOString().split('T')[0]
+            };
+            
+            return await this.timeEntryRepository.findMany(
+                dateFilters,
+                { page: 1, limit: 1000 }, // Large limit to get all entries
+                requestingUser.role,
+                userFilters.userId
             );
         } catch (error) {
             logger.error('Error al obtener registros de tiempo por rango:', error);
