@@ -87,7 +87,6 @@ model Area {
   statusMappings   StatusMapping[]
   workflowsFrom    WorkflowConfig[] @relation("WorkflowFromArea")
   workflowsTo      WorkflowConfig[] @relation("WorkflowToArea")
-  importLogs       ImportLog[]      @relation("ImportLogArea")
 
   @@map("areas")
 }

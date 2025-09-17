@@ -210,8 +210,10 @@ class TaskRepository {
         if (filters.siebelOrderNumber) {
             where.project = {
                 ...where.project,
-                excelDetails: {
-                    siebelOrderNumber: { contains: filters.siebelOrderNumber, mode: 'insensitive' },
+                stagingProjects: {
+                    some: {
+                        siebelId: { contains: filters.siebelOrderNumber, mode: 'insensitive' },
+                    },
                 },
             };
         }
@@ -232,20 +234,24 @@ class TaskRepository {
                 });
             }
             
-            // Mentores de proyectos Excel
+            // Arquitectos de proyectos staging
             if (filters.mentorId) {
                 projectFilters.push({
-                    excelDetails: {
-                        mentorId: filters.mentorId,
+                    stagingProjects: {
+                        some: {
+                            architectId: filters.mentorId,
+                        },
                     },
                 });
             }
-            
-            // Coordinadores de proyectos Excel
+
+            // Coordinadores de proyectos staging
             if (filters.coordinatorId) {
                 projectFilters.push({
-                    excelDetails: {
-                        coordinatorId: filters.coordinatorId,
+                    stagingProjects: {
+                        some: {
+                            designCoordinatorId: filters.coordinatorId,
+                        },
                     },
                 });
             }
@@ -295,10 +301,11 @@ class TaskRepository {
                                 },
                             },
                         },
-                        excelDetails: {
+                        stagingProjects: {
                             select: {
-                                siebelOrderNumber: true,
-                                mentor: {
+                                id: true,
+                                siebelId: true,
+                                architect: {
                                     select: {
                                         id: true,
                                         firstName: true,
@@ -306,7 +313,7 @@ class TaskRepository {
                                         email: true,
                                     },
                                 },
-                                coordinator: {
+                                designCoordinator: {
                                     select: {
                                         id: true,
                                         firstName: true,

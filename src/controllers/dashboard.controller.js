@@ -32,7 +32,7 @@ class DashboardController {
             // Validar formato de fechas
             const start = new Date(startDate);
             const end = new Date(endDate);
-            
+
             if (isNaN(start.getTime()) || isNaN(end.getTime())) {
                 return ApiResponse.error(res, 'Formato de fecha inválido. Use YYYY-MM-DD', 400);
             }
@@ -43,13 +43,13 @@ class DashboardController {
             const endDateObj = new Date(endDate);
             const timeEntriesResult = await this.timeEntryService.getTimeEntriesByDateRange(filters, startDateObj, endDateObj, req.user);
             const timeEntries = timeEntriesResult.timeEntries || timeEntriesResult;
-            
+
             // 2. Calcular métricas básicas
             const totalCapturedHours = timeEntries.reduce((sum, entry) => sum + parseFloat(entry.hours || 0), 0);
             const workDays = this.calculateWorkDays(start, end);
             const referenceHours = workDays * 9; // 9 horas por día laboral
             const workload = referenceHours > 0 ? Math.round((totalCapturedHours / referenceHours) * 100) : 0;
-            
+
 
             // 3. Obtener proyectos únicos con sus datos completos
             const uniqueProjectIds = [...new Set(timeEntries.map(entry => entry.projectId))];
@@ -64,7 +64,7 @@ class DashboardController {
             const projectDistribution = projects.map(project => {
                 const projectEntries = timeEntries.filter(entry => entry.projectId === project.id);
                 const projectHours = projectEntries.reduce((sum, entry) => sum + parseFloat(entry.hours || 0), 0);
-                
+
                 return {
                     id: project.id,
                     name: project.name,
@@ -132,7 +132,7 @@ class DashboardController {
             };
 
             logger.info(`[Dashboard] Dashboard generado exitosamente: ${totalCapturedHours}h en ${timeEntries.length} entradas`);
-            
+
             return ApiResponse.success(res, dashboardData, 'Dashboard del colaborador generado exitosamente');
 
         } catch (error) {
@@ -147,7 +147,7 @@ class DashboardController {
     calculateWorkDays(startDate, endDate) {
         let count = 0;
         const current = new Date(startDate);
-        
+
         while (current <= endDate) {
             const dayOfWeek = current.getDay();
             if (dayOfWeek !== 0 && dayOfWeek !== 6) { // No contar sábado y domingo
@@ -155,7 +155,7 @@ class DashboardController {
             }
             current.setDate(current.getDate() + 1);
         }
-        
+
         return count;
     }
 
@@ -163,9 +163,9 @@ class DashboardController {
      * Calcular distribución de horas por día de la semana
      */
     calculateWeeklyDistribution(timeEntries) {
-        const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
         const dayHours = new Array(7).fill(0);
-        
+
         timeEntries.forEach(entry => {
             // entry.date puede venir como Date object o string, normalizar
             let entryDate;
@@ -175,11 +175,11 @@ class DashboardController {
                 // Si es string, parsearlo correctamente
                 entryDate = new Date(entry.date);
             }
-            
+
             const dayOfWeek = entryDate.getDay(); // Usar getDay() normal, no UTC
             const hours = parseFloat(entry.hours || 0);
             dayHours[dayOfWeek] += hours;
-            
+
         });
 
 
@@ -195,8 +195,8 @@ class DashboardController {
             dayHours[5], // Vie del array = Sábado real = 0
             dayHours[6]  // Sab del array = Domingo real = 0
         ];
-        
-        
+
+
         return {
             labels: ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'],
             data: reorderedData

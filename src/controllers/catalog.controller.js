@@ -7,23 +7,14 @@ const prisma = require('../config/database');
  */
 class CatalogController {
     /**
-     * Obtener lista de gerencias de venta
+     * Obtener lista de gerencias de venta (deprecated en Schema v2)
+     * TODO: Migrar a otra estructura o eliminar completamente
      */
     getSalesManagements = async (req, res) => {
         try {
-            const salesManagements = await prisma.catalog.findMany({
-                where: {
-                    isActive: true,
-                    type: 'SALES_MANAGEMENT',
-                },
-                select: {
-                    id: true,
-                    name: true,
-                },
-                orderBy: { name: 'asc' },
-            });
-
-            return ApiResponse.success(res, salesManagements, 'Gerencias de venta obtenidas exitosamente');
+            // En Schema v2 no existe el tipo SALES_MANAGEMENT
+            // Retornamos array vacío por compatibilidad
+            return ApiResponse.success(res, [], 'Gerencias de venta obtenidas exitosamente');
         } catch (error) {
             logger.error('Error al obtener gerencias de venta:', error);
             return ApiResponse.error(res, error.message, 500);
@@ -89,23 +80,14 @@ class CatalogController {
     };
 
     /**
-     * Obtener lista de ejecutivos de venta
+     * Obtener lista de ejecutivos de venta (deprecated en Schema v2)
+     * TODO: Migrar a otra estructura o eliminar completamente
      */
     getSalesExecutives = async (req, res) => {
         try {
-            const salesExecutives = await prisma.catalog.findMany({
-                where: {
-                    isActive: true,
-                    type: 'SALES_EXECUTIVE',
-                },
-                select: {
-                    id: true,
-                    name: true,
-                },
-                orderBy: { name: 'asc' },
-            });
-
-            return ApiResponse.success(res, salesExecutives, 'Ejecutivos de venta obtenidos exitosamente');
+            // En Schema v2 no existe el tipo SALES_EXECUTIVE
+            // Retornamos array vacío por compatibilidad
+            return ApiResponse.success(res, [], 'Ejecutivos de venta obtenidos exitosamente');
         } catch (error) {
             logger.error('Error al obtener ejecutivos de venta:', error);
             return ApiResponse.error(res, error.message, 500);
@@ -137,23 +119,14 @@ class CatalogController {
     };
 
     /**
-     * Obtener tipos de proyecto únicos
+     * Obtener tipos de proyecto únicos (deprecated en Schema v2)
+     * TODO: Migrar a otra estructura o eliminar completamente
      */
     getProjectTypes = async (req, res) => {
         try {
-            const projectTypes = await prisma.catalog.findMany({
-                where: {
-                    isActive: true,
-                    type: 'PROJECT_TYPE',
-                },
-                select: {
-                    id: true,
-                    name: true,
-                },
-                orderBy: { name: 'asc' },
-            });
-
-            return ApiResponse.success(res, projectTypes, 'Tipos de proyecto obtenidos exitosamente');
+            // En Schema v2 no existe el tipo PROJECT_TYPE
+            // Retornamos array vacío por compatibilidad
+            return ApiResponse.success(res, [], 'Tipos de proyecto obtenidos exitosamente');
         } catch (error) {
             logger.error('Error al obtener tipos de proyecto:', error);
             return ApiResponse.error(res, error.message, 500);
@@ -166,36 +139,37 @@ class CatalogController {
     getFilterStats = async (req, res) => {
         try {
             const stats = await Promise.all([
-                // Proyectos con detalles de Excel
+                // Proyectos con staging projects asociados
                 prisma.project.count({
                     where: {
-                        excelDetails: { isNot: null },
+                        stagingProjects: { some: {} },
                         isActive: true,
                     }
                 }),
-                // Proyectos con información financiera
-                prisma.project.count({
+                // Proyectos staging con información financiera
+                prisma.stagingProject.count({
                     where: {
+                        OR: [
+                            { monthlyIncomeMXN: { not: null } },
+                            { tcvMXN: { not: null } },
+                        ],
                         isActive: true,
-                        excelDetails: {
-                            OR: [
-                                { monthlyBillingMXN: { not: null } },
-                                { totalContractAmountMXN: { not: null } },
-                            ]
-                        }
                     }
                 }),
-                // Total de proyectos
+                // Total de proyectos activos
                 prisma.project.count({ where: { isActive: true } }),
+                // Total de proyectos staging
+                prisma.stagingProject.count({ where: { isActive: true } }),
             ]);
 
-            const [projectsWithExcel, projectsWithFinancials, totalProjects] = stats;
+            const [projectsWithStaging, stagingWithFinancials, totalProjects, totalStaging] = stats;
 
             return ApiResponse.success(res, {
                 totalProjects,
-                projectsWithExcel,
-                projectsWithFinancials,
-                projectsWithoutExcel: totalProjects - projectsWithExcel,
+                totalStaging,
+                projectsWithStaging,
+                stagingWithFinancials,
+                projectsWithoutStaging: totalProjects - projectsWithStaging,
             }, 'Estadísticas de filtros obtenidas exitosamente');
         } catch (error) {
             logger.error('Error al obtener estadísticas de filtros:', error);

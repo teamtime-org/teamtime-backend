@@ -54,9 +54,11 @@ app.use(cors({
     origin: config.CORS_ORIGIN ? config.CORS_ORIGIN.split(',') : [
         'http://localhost:3000',  // React por defecto
         'http://localhost:5173',  // Vite por defecto
+        'http://localhost:5174',  // Vite alternativo
         'http://localhost:4173',  // Vite preview
         'http://localhost:3001',  // Alternativo común
         'http://127.0.0.1:5173',  // Localhost alias
+        'http://127.0.0.1:5174',  // Localhost alias alternativo
         'http://127.0.0.1:3000'   // Localhost alias
     ],
     credentials: true,

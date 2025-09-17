@@ -1,1741 +1,466 @@
 const ExcelJS = require('exceljs');
-const bcrypt = require('bcryptjs');
-const prisma = require('../config/database');
-const { USER_ROLES, STANDARD_PROJECT_TASKS, GENERAL_PROJECT_TASKS } = require('../utils/constants');
-const logger = require('../utils/logger');
-const ProjectService = require('./project.service');
+const { PrismaClient } = require('@prisma/client');
+const fieldMappingService = require('./fieldMapping.service');
 
-/**
- * Servicio para importación de proyectos desde Excel
- */
+const prisma = new PrismaClient();
+
 class ExcelImportService {
-    constructor() {
-        this.projectService = new ProjectService();
-        this.columnMapping = {
-            'ID': 'excelId',
-            'Title': 'title',
-            'Descripcion Servicio': 'serviceDescription',
-            'Estatus General': 'generalStatus',
-            'Proximos Pasos': 'nextSteps',
-            'Mentor': 'mentor',
-            'Fecha Asignacion': 'assignmentDate',
-            'Etapa de Proyecto': 'projectStage',
-            'Riesgo': 'risk',
-            'Tipo de Proyecto': 'projectType',
-            'Tabla Resumen': 'summaryTable',
-            'Coordinador': 'coordinator',
-            'Linea de Negocios': 'businessLine',
-            'Tipo de Oportunidad': 'opportunityType',
-            '¿Proyecto Estrategico?': 'isStrategicProject',
-            'Tipo de Riesgo': 'riskTypes',
-            'Fecha Termino Estimada': 'estimatedEndDate',
-            'Actualizacion Fecha Termino Estimada': 'updatedEstimatedEndDate',
-            'Fecha de Termino Real': 'actualEndDate',
-            'Control Presupuestal': 'budgetControl',
-            'Monto Total del Contrato MXN': 'totalContractAmountMXN',
-            'Ingreso': 'income',
-            'Periodo Contratacion (Meses)': 'contractPeriodMonths',
-            'Facturacion Mensual MXN': 'monthlyBillingMXN',
-            'Penalizacion': 'penalty',
-            'Proveedores Involucrados': 'suppliers',
-            'Fecha Fallo/Adjudicacion': 'awardDate',
-            'Fecha Transferencia Diseño': 'designTransferDate',
-            'Fecha de entrega por Licitacion': 'tenderDeliveryDate',
-            'Segmento': 'segment',
-            'Gerencia de Ventas': 'salesManagement',
-            'Ejecutivo Ventas': 'salesExecutive',
-            'Diseñador': 'designer',
-            'Orden de Siebel/Numero de Proceso': 'siebelOrderNumber',
-            'Orden en Progreso': 'orderInProgress',
-            'Ordenes Relacionadas (Siebel)': 'relatedOrders',
-            '¿Aplica Control de Cambios?': 'appliesChangeControl',
-            'Justificación': 'justification',
-            'SharePoint Documentacion': 'sharePointDocumentation',
-            'Respositorio Estratel': 'estratelRepository'
-        };
+  /**
+   * Importa proyectos desde Excel a staging area
+   */
+  async importExcelToStaging(filePath, sourceAreaId, importedBy) {
+    try {
+      // Leer archivo Excel
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(filePath);
+      const worksheet = workbook.getWorksheet(1);
 
-        this.statusMapping = {
-            'Ejecución': 'ACTIVE',
-            'Completado': 'COMPLETED',
-            'Cancelada': 'CANCELLED',
-            'Detenido': 'ON_HOLD',
-            'Ganada': 'AWARDED'
-        };
-    }
+      // Obtener headers
+      const headerRow = worksheet.getRow(1);
+      const headers = [];
+      headerRow.eachCell((cell, colNumber) => {
+        headers[colNumber] = cell.value;
+      });
 
-    /**
-     * Importar proyectos desde archivo Excel
-     * @param {string} filePath - Ruta del archivo Excel
-     * @param {Object} requestingUser - Usuario que realiza la importación
-     * @param {string} areaId - ID del área donde se asignarán los proyectos
-     * @param {boolean} isIncremental - Si es carga incremental (solo nuevos) o actualización completa
-     * @returns {Promise<Object>} - Resultado de la importación
-     */
-    async importFromExcel(filePath, requestingUser, areaId, isIncremental = false) {
-        try {
-            // Validar parámetros de entrada
-            if (!requestingUser || !requestingUser.userId) {
-                throw new Error('Usuario solicitante requerido para importación');
-            }
+      const results = {
+        total: 0,
+        imported: 0,
+        errors: [],
+        stagingProjects: []
+      };
 
-            if (!areaId) {
-                throw new Error('ID de área requerido para importación');
-            }
+      // Crear registro de importación
+      const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-            // Verificar que el usuario existe en la base de datos y actualizar ID si es necesario
-            let userExists = await prisma.user.findUnique({
-                where: { id: requestingUser.userId },
-                select: { id: true, email: true, firstName: true, lastName: true, role: true }
-            });
-
-            if (!userExists) {
-                // Por seguridad, si el userId del token no existe, invalidar la sesión
-                logger.error(`Token de seguridad inválido: Usuario con ID ${requestingUser.userId} no existe. Email del token: ${requestingUser.email}`);
-
-                const error = new Error('Token de autenticación inválido. Por favor, inicie sesión nuevamente.');
-                error.statusCode = 401; // Unauthorized
-                error.code = 'INVALID_TOKEN';
-                throw error;
-            }
-
-            // Verificar permisos
-            if (userExists.role !== USER_ROLES.ADMINISTRADOR) {
-                throw new Error('Solo los administradores pueden importar proyectos');
-            }
-
-            logger.info(`Iniciando importación de Excel: ${filePath} por usuario ${requestingUser.email} (ID: ${requestingUser.userId})`);
-
-            const ExcelJS = require('exceljs');
-            const workbook = new ExcelJS.Workbook();
-            await workbook.xlsx.readFile(filePath);
-
-            const worksheet = workbook.worksheets[0];
-            if (!worksheet) {
-                throw new Error('El archivo Excel no contiene hojas de trabajo');
-            }
-
-            const headers = this.extractHeaders(worksheet);
-            const data = this.extractData(worksheet, headers);
-
-            logger.info(`Procesando ${data.length} filas del Excel`);
-
-            const result = await this.processData(data, requestingUser, areaId, isIncremental);
-
-            logger.info(`Importación completada: ${result.success} exitosos, ${result.errors.length} errores`);
-            return result;
-
-        } catch (error) {
-            logger.error('Error en importación de Excel:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Extraer headers del Excel
-     * @param {Object} worksheet 
-     * @returns {Array}
-     */
-    extractHeaders(worksheet) {
-        const headers = [];
-        const headerRow = worksheet.getRow(1);
-
-        headerRow.eachCell((cell, colNumber) => {
-            headers[colNumber] = cell.value;
+      // Validar que el usuario existe, sino usar el admin por defecto
+      let validImportedBy = importedBy;
+      if (importedBy) {
+        const userExists = await prisma.user.findUnique({
+          where: { id: importedBy }
         });
-
-        return headers;
-    }
-
-    /**
-     * Extraer datos del Excel
-     * @param {Object} worksheet 
-     * @param {Array} headers 
-     * @returns {Array}
-     */
-    extractData(worksheet, headers) {
-        const data = [];
-
-        worksheet.eachRow((row, rowNumber) => {
-            if (rowNumber === 1) return; // Skip header row
-
-            const rowData = {};
-            row.eachCell((cell, colNumber) => {
-                const header = headers[colNumber];
-                if (header && this.columnMapping[header]) {
-                    rowData[this.columnMapping[header]] = cell.value;
-                }
-            });
-
-            if (Object.keys(rowData).length > 0) {
-                data.push(rowData);
-            }
-        });
-
-        return data;
-    }
-
-    /**
-     * Procesar datos del Excel
-     * @param {Array} data 
-     * @param {Object} requestingUser 
-     * @param {string} areaId - ID del área donde se asignarán los proyectos
-     * @param {boolean} isIncremental - Si es carga incremental
-     * @returns {Promise<Object>}
-     */
-    async processData(data, requestingUser, areaId, isIncremental = false) {
-        const result = {
-            success: 0,
-            errors: [],
-            created: [],
-            updated: [],
-            warnings: []
-        };
-
-        // Validar que el usuario solicitante esté definido
-        if (!requestingUser || !requestingUser.userId) {
-            throw new Error('Usuario solicitante no definido para procesar datos');
-        }
-
-        // Verificar que el usuario existe en la base de datos y actualizar ID si es necesario
-        let userExists = await prisma.user.findUnique({
-            where: { id: requestingUser.userId },
-            select: { id: true, email: true, firstName: true, lastName: true }
-        });
-
         if (!userExists) {
-            // Por seguridad, si el userId del token no existe, invalidar la sesión
-            logger.error(`Token de seguridad inválido: Usuario con ID ${requestingUser.userId} no existe. Email del token: ${requestingUser.email}`);
-
-            const error = new Error('Token de autenticación inválido. Por favor, inicie sesión nuevamente.');
-            error.statusCode = 401; // Unauthorized
-            error.code = 'INVALID_TOKEN';
-            throw error;
+          // Buscar usuario admin por defecto
+          const adminUser = await prisma.user.findFirst({
+            where: { role: 'ADMINISTRADOR' }
+          });
+          validImportedBy = adminUser ? adminUser.id : null;
         }
+      }
 
-        // Guardar el usuario solicitante y areaId para usar en saveProject y creación de usuarios
-        this.requestingUser = requestingUser;
-        this.projectAreaId = areaId;
-
-        logger.info(`Procesando datos con usuario: ${requestingUser.email} (ID: ${requestingUser.userId}) - Área del proyecto: ${areaId}`);
-
-        // Crear un cache de usuarios para evitar duplicados
-        this.userCache = new Map();
-        this.emailCounter = new Map(); // Cache para contadores de emails
-
-        try {
-            // Pre-cargar usuarios existentes en cache para optimizar búsquedas
-            await this.preloadExistingUsers(data);
-
-            // Pre-crear todos los usuarios necesarios de forma secuencial para evitar condiciones de carrera
-            await this.preCreateUsers(data);
-
-            // Pre-crear catálogos necesarios
-            await this.preCreateCatalogs(data);
-
-            logger.info(`Procesando ${data.length} filas en lotes para mejor rendimiento...`);
-
-            // Procesar en lotes de 10 para mejor rendimiento (sin creación de usuarios concurrente)
-            const batchSize = 10;
-            for (let i = 0; i < data.length; i += batchSize) {
-                const batch = data.slice(i, Math.min(i + batchSize, data.length));
-
-                // Usar Promise.allSettled para que los errores no detengan el procesamiento
-                const batchResults = await Promise.allSettled(batch.map(async (rowData, batchIndex) => {
-                    const actualRow = i + batchIndex + 2; // +2 because row 1 is header and array is 0-indexed
-                    return await this.processRowWithDetailedErrors(rowData, actualRow, areaId, isIncremental);
-                }));
-
-                // Procesar resultados del lote
-                batchResults.forEach((batchResult, batchIndex) => {
-                    const actualRow = i + batchIndex + 2;
-
-                    if (batchResult.status === 'fulfilled') {
-                        const rowResult = batchResult.value;
-                        if (rowResult.success) {
-                            if (rowResult.skipped) {
-                                // Proyecto omitido en carga incremental
-                                result.warnings.push({
-                                    row: actualRow,
-                                    warning: 'Proyecto omitido en carga incremental',
-                                    data: batch[batchIndex]
-                                });
-                            } else if (rowResult.isUpdate) {
-                                result.updated.push(rowResult.project);
-                                result.success++;
-                            } else {
-                                result.created.push(rowResult.project);
-                                result.success++;
-                            }
-
-                            // Agregar warnings si los hay
-                            if (rowResult.warnings && rowResult.warnings.length > 0) {
-                                rowResult.warnings.forEach(warning => {
-                                    result.warnings.push({
-                                        row: actualRow,
-                                        warning: warning,
-                                        data: rowResult.originalData
-                                    });
-                                });
-                            }
-                        } else {
-                            // Error controlado durante el procesamiento
-                            result.errors.push({
-                                row: actualRow,
-                                data: rowResult.originalData,
-                                error: rowResult.error,
-                                errorType: rowResult.errorType || 'PROCESSING_ERROR',
-                                details: rowResult.details || {}
-                            });
-                        }
-                    } else {
-                        // Error no controlado (Promise rechazado)
-                        const originalData = batch[batchIndex];
-                        logger.error(`Error no controlado procesando fila ${actualRow}:`, batchResult.reason);
-                        result.errors.push({
-                            row: actualRow,
-                            data: originalData,
-                            error: batchResult.reason?.message || 'Error inesperado durante el procesamiento',
-                            errorType: 'UNEXPECTED_ERROR',
-                            details: {
-                                stack: batchResult.reason?.stack,
-                                originalError: batchResult.reason
-                            }
-                        });
-                    }
-                });                // Log progreso cada lote
-                logger.info(`Procesado lote ${Math.floor(i / batchSize) + 1}/${Math.ceil(data.length / batchSize)} - ${result.success} exitosos, ${result.errors.length} errores, ${result.warnings.length} warnings`);
-            }
-
-        } catch (error) {
-            logger.error('Error crítico durante el procesamiento:', error);
-            throw new Error(`Error crítico durante la importación: ${error.message}`);
-        } finally {
-            // Limpiar cache
-            this.userCache.clear();
-            this.emailCounter.clear();
+      const importLog = await prisma.importLog.create({
+        data: {
+          batchId,
+          fileName: filePath.split('/').pop(),
+          sourceAreaId,
+          totalRecords: worksheet.rowCount - 1,
+          processedRecords: 0,
+          successRecords: 0,
+          errorRecords: 0,
+          skippedRecords: 0,
+          importedBy: validImportedBy,
+          startedAt: new Date()
         }
+      });
 
-        // Generar reporte de errores si hay fallos
-        if (result.errors.length > 0) {
-            result.errorReport = await this.generateErrorReport(result.errors);
-        }
+      // Procesar cada fila (saltar header)
+      for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+        const row = worksheet.getRow(rowNumber);
+        const rawData = {};
 
-        return result;
-    }
-
-    /**
-     * Procesar una fila con manejo detallado de errores
-     * @param {Object} rowData 
-     * @param {number} rowNumber 
-     * @param {string} areaId
-     * @param {boolean} isIncremental
-     * @returns {Promise<Object>}
-     */
-    async processRowWithDetailedErrors(rowData, rowNumber, areaId, isIncremental = false) {
-        const rowResult = {
-            success: false,
-            project: null,
-            isUpdate: false,
-            originalData: rowData,
-            error: null,
-            errorType: null,
-            details: {},
-            warnings: []
-        };
-
-        try {
-            // Validar datos requeridos
-            const validation = this.validateRequiredFields(rowData, rowNumber);
-            if (!validation.isValid) {
-                rowResult.error = validation.error;
-                rowResult.errorType = 'VALIDATION_ERROR';
-                rowResult.details = validation.details;
-                return rowResult;
-            }
-
-            // Procesar fila con manejo de warnings
-            const processResult = await this.processRowWithWarnings(rowData, rowNumber, areaId, isIncremental);
-
-            // Intentar guardar el proyecto
-            const savedProject = await this.saveProject(processResult.projectData, this.requestingUser);
-
-            rowResult.success = true;
-            rowResult.project = savedProject;
-            rowResult.isUpdate = processResult.isUpdate;
-            rowResult.warnings = processResult.warnings;
-
-            return rowResult;
-
-        } catch (error) {
-            logger.error(`Error procesando fila ${rowNumber}:`, error);
-
-            rowResult.error = error.message;
-            rowResult.errorType = this.categorizeError(error);
-            rowResult.details = {
-                errorCode: error.code,
-                constraint: error.meta?.target,
-                originalError: error.name
-            };
-
-            return rowResult;
-        }
-    }
-
-    /**
-     * Validar campos requeridos de una fila
-     * @param {Object} rowData 
-     * @param {number} rowNumber 
-     * @returns {Object}
-     */
-    validateRequiredFields(rowData, rowNumber) {
-        const requiredFields = ['title'];
-        const missingFields = [];
-        const invalidFields = [];
-
-        // Verificar campos requeridos
-        requiredFields.forEach(field => {
-            if (!rowData[field] || String(rowData[field]).trim() === '') {
-                missingFields.push(field);
-            }
+        // Extraer datos de la fila
+        row.eachCell((cell, colNumber) => {
+          const header = headers[colNumber];
+          if (header) {
+            rawData[header] = cell.value;
+          }
         });
 
-        // Validaciones específicas
-        if (rowData.excelId && (isNaN(parseInt(rowData.excelId)) || parseInt(rowData.excelId) <= 0)) {
-            invalidFields.push({ field: 'excelId', reason: 'Debe ser un número entero positivo' });
-        }
-
-        if (rowData.assignmentDate && !this.isValidDate(rowData.assignmentDate)) {
-            invalidFields.push({ field: 'assignmentDate', reason: 'Formato de fecha inválido' });
-        }
-
-        if (rowData.estimatedEndDate && !this.isValidDate(rowData.estimatedEndDate)) {
-            invalidFields.push({ field: 'estimatedEndDate', reason: 'Formato de fecha inválido' });
-        }
-
-        if (missingFields.length > 0 || invalidFields.length > 0) {
-            return {
-                isValid: false,
-                error: `Datos inválidos en fila ${rowNumber}`,
-                details: {
-                    missingFields,
-                    invalidFields
-                }
-            };
-        }
-
-        return { isValid: true };
-    }
-
-    /**
-     * Verificar si una fecha es válida
-     * @param {*} dateValue 
-     * @returns {boolean}
-     */
-    isValidDate(dateValue) {
-        if (!dateValue) return true; // null/undefined son válidos
-        if (dateValue instanceof Date) return !isNaN(dateValue.getTime());
+        results.total++;
 
         try {
-            const date = new Date(dateValue);
-            return !isNaN(date.getTime());
-        } catch {
-            return false;
-        }
-    }
+          // Mapear datos usando fieldMappingService
+          const mappingResult = await fieldMappingService.mapExcelData(
+            rawData,
+            sourceAreaId
+          );
 
-    /**
-     * Procesar fila con manejo de warnings
-     * @param {Object} rowData 
-     * @param {number} rowNumber 
-     * @param {string} areaId 
-     * @param {boolean} isIncremental
-     * @returns {Promise<Object>}
-     */
-    async processRowWithWarnings(rowData, rowNumber, areaId, isIncremental = false) {
-        const warnings = [];
-        let isUpdate = false;
-
-        // Verificar si es actualización o carga incremental
-        if (rowData.excelId) {
-            const existingProject = await prisma.project.findFirst({
-                where: {
-                    excelDetails: {
-                        excelId: String(rowData.excelId)
-                    }
-                },
-                include: { excelDetails: true }
+          if (!mappingResult.isValid) {
+            results.errors.push({
+              row: rowNumber,
+              errors: mappingResult.validationErrors,
+              data: rawData
             });
+            continue;
+          }
 
-            if (existingProject) {
-                if (isIncremental) {
-                    // En modo incremental, saltar proyectos existentes
-                    warnings.push(`Proyecto con ID ${rowData.excelId} ya existe, se omite en carga incremental`);
-                    return { projectData: null, isUpdate: false, warnings, skipped: true };
-                } else {
-                    isUpdate = true;
-                    warnings.push(`Proyecto con ID ${rowData.excelId} será actualizado`);
-                }
-            }
-        }
+          // Crear staging project
+          const stagingProject = await this.createStagingProject(
+            mappingResult.mappedData,
+            sourceAreaId,
+            importLog.id,
+            rowNumber,
+            batchId
+          );
 
-        // Procesar datos normalmente
-        const projectData = await this.processRow(rowData, rowNumber, areaId, isUpdate);
-
-        // Si el proyecto fue omitido, retornar resultado especial
-        if (!projectData) {
-            return { projectData: null, isUpdate: false, warnings, skipped: true };
-        }
-
-        // Verificar si algunos usuarios no se pudieron crear/encontrar
-        if (projectData && projectData.excelProject) {
-            if (rowData.mentor && !projectData.excelProject.mentorId) {
-                warnings.push(`No se pudo crear/encontrar el mentor: ${rowData.mentor}`);
-            }
-            if (rowData.coordinator && !projectData.excelProject.coordinatorId) {
-                warnings.push(`No se pudo crear/encontrar el coordinador: ${rowData.coordinator}`);
-            }
-        }
-
-        return {
-            projectData,
-            isUpdate,
-            warnings
-        };
-    }
-
-    /**
-     * Categorizar el tipo de error
-     * @param {Error} error 
-     * @returns {string}
-     */
-    categorizeError(error) {
-        if (error.code === 'P2002') return 'DUPLICATE_ERROR';
-        if (error.code === 'P2025') return 'NOT_FOUND_ERROR';
-        if (error.code === 'P2003') return 'FOREIGN_KEY_ERROR';
-        if (error.name === 'ValidationError') return 'VALIDATION_ERROR';
-        if (error.message.includes('timeout')) return 'TIMEOUT_ERROR';
-        if (error.message.includes('connection')) return 'CONNECTION_ERROR';
-        return 'UNKNOWN_ERROR';
-    }
-
-    /**
-     * Generar reporte de errores en formato Excel
-     * @param {Array} errors 
-     * @returns {Promise<Object>}
-     */
-    async generateErrorReport(errors) {
-        try {
-            const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Errores de Importación');
-
-            // Configurar headers del reporte de errores
-            const headers = [
-                'Fila',
-                'Tipo de Error',
-                'Descripción del Error',
-                'Campos Faltantes',
-                'Campos Inválidos',
-                'ID Excel',
-                'Título',
-                'Mentor',
-                'Coordinador',
-                'Fecha Asignación',
-                'Estado General',
-                'Detalles Técnicos'
-            ];
-
-            worksheet.addRow(headers);
-
-            // Aplicar estilo a los headers
-            const headerRow = worksheet.getRow(1);
-            headerRow.font = { bold: true };
-            headerRow.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFE6E6FA' }
-            };
-
-            // Agregar datos de errores
-            errors.forEach(errorInfo => {
-                const row = [
-                    errorInfo.row,
-                    errorInfo.errorType || 'ERROR_GENERAL',
-                    errorInfo.error,
-                    errorInfo.details?.missingFields?.join(', ') || '',
-                    errorInfo.details?.invalidFields?.map(f => `${f.field}: ${f.reason}`).join('; ') || '',
-                    errorInfo.data?.excelId || '',
-                    errorInfo.data?.title || '',
-                    errorInfo.data?.mentor || '',
-                    errorInfo.data?.coordinator || '',
-                    errorInfo.data?.assignmentDate || '',
-                    errorInfo.data?.generalStatus || '',
-                    JSON.stringify(errorInfo.details || {})
-                ];
-                worksheet.addRow(row);
-            });
-
-            // Ajustar ancho de columnas
-            worksheet.columns.forEach((column, index) => {
-                if (index === headers.length - 1) { // Detalles técnicos
-                    column.width = 30;
-                } else if (index === 2) { // Descripción del error
-                    column.width = 40;
-                } else {
-                    column.width = 15;
-                }
-            });
-
-            // Crear segunda hoja con datos originales para corrección
-            const dataWorksheet = workbook.addWorksheet('Datos para Corrección');
-
-            // Headers originales
-            const originalHeaders = Object.keys(this.columnMapping);
-            dataWorksheet.addRow(originalHeaders);
-
-            // Aplicar estilo a headers de datos
-            const dataHeaderRow = dataWorksheet.getRow(1);
-            dataHeaderRow.font = { bold: true };
-            dataHeaderRow.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFFFEFD5' }
-            };
-
-            // Agregar solo los datos que fallaron para su corrección
-            errors.forEach(errorInfo => {
-                const originalRow = [];
-                originalHeaders.forEach(header => {
-                    const mappedField = this.columnMapping[header];
-                    originalRow.push(errorInfo.data[mappedField] || '');
-                });
-                dataWorksheet.addRow(originalRow);
-            });
-
-            // Ajustar ancho de columnas en la hoja de datos
-            dataWorksheet.columns.forEach(column => {
-                column.width = 20;
-            });
-
-            // Generar buffer del archivo
-            const buffer = await workbook.xlsx.writeBuffer();
-
-            return {
-                filename: `errores_importacion_${new Date().toISOString().split('T')[0]}.xlsx`,
-                buffer: buffer,
-                totalErrors: errors.length
-            };
+          results.imported++;
+          results.stagingProjects.push(stagingProject);
 
         } catch (error) {
-            logger.error('Error generando reporte de errores:', error);
-            return {
-                filename: null,
-                buffer: null,
-                totalErrors: errors.length,
-                reportError: error.message
-            };
+          results.errors.push({
+            row: rowNumber,
+            error: error.message,
+            data: rawData
+          });
         }
+      }
+
+      // Actualizar log de importación
+      await prisma.importLog.update({
+        where: { id: importLog.id },
+        data: {
+          processedRecords: results.total,
+          successRecords: results.imported,
+          errorRecords: results.errors.length,
+          skippedRecords: results.total - results.imported - results.errors.length,
+          errors: results.errors,
+          summary: {
+            total: results.total,
+            imported: results.imported,
+            errors: results.errors.length
+          },
+          completedAt: new Date()
+        }
+      });
+
+      return {
+        ...results,
+        importLogId: importLog.id
+      };
+
+    } catch (error) {
+      console.error('Error importing Excel:', error);
+      throw error;
     }
+  }
 
-    /**
-     * Procesar una fila del Excel
-     * @param {Object} rowData 
-     * @param {number} rowNumber 
-     * @param {string} areaId - ID del área donde se asignará el proyecto
-     * @param {boolean} isUpdate - Si es actualización de proyecto existente
-     * @returns {Promise<Object>}
-     */
-    async processRow(rowData, rowNumber, areaId, isUpdate = false) {
-        // Datos del proyecto principal
-        const projectData = {
-            name: this.parseString(rowData.title),
-            description: this.parseString(rowData.serviceDescription),
-            status: this.mapStatus(rowData.projectStage),
-            startDate: this.parseDate(rowData.assignmentDate),
-            endDate: this.parseDate(rowData.estimatedEndDate),
-            areaId: areaId
-        };
+  /**
+   * Crea proyecto en staging area
+   */
+  async createStagingProject(mappedData, sourceAreaId, importLogId, rowNumber, batchId) {
+    try {
+      // Asegurar que batchId siempre esté presente
+      const projectBatchId = batchId || `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-        // Datos del proyecto Excel (detalles extendidos)
-        const excelProjectData = {
-            excelId: this.parseString(rowData.excelId),
-            title: this.parseString(rowData.title),
-            serviceDescription: this.parseString(rowData.serviceDescription),
-            generalStatus: this.parseString(rowData.generalStatus),
-            nextSteps: this.parseString(rowData.nextSteps),
-            assignmentDate: this.parseDate(rowData.assignmentDate),
-            isStrategicProject: this.parseBoolean(rowData.isStrategicProject),
-            riskTypes: this.parseArray(rowData.riskTypes),
-            estimatedEndDate: this.parseDate(rowData.estimatedEndDate),
-            updatedEstimatedEndDate: this.parseDate(rowData.updatedEstimatedEndDate),
-            actualEndDate: this.parseDate(rowData.actualEndDate),
-            budgetControl: this.parseString(rowData.budgetControl),
-            totalContractAmountMXN: this.parseDecimal(rowData.totalContractAmountMXN),
-            income: this.parseDecimal(rowData.income),
-            contractPeriodMonths: this.parseDecimal(rowData.contractPeriodMonths, 99999.9),
-            monthlyBillingMXN: this.parseDecimal(rowData.monthlyBillingMXN),
-            penalty: this.parseString(rowData.penalty),
-            providersInvolved: this.parseString(rowData.suppliers),
-            awardDate: this.parseDate(rowData.awardDate),
-            designTransferDate: this.parseDate(rowData.designTransferDate),
-            tenderDeliveryDate: this.parseDate(rowData.tenderDeliveryDate),
-            siebelOrderNumber: this.parseString(rowData.siebelOrderNumber),
-            orderInProgress: this.parseString(rowData.orderInProgress),
-            relatedOrders: this.parseString(rowData.relatedOrders),
-            appliesChangeControl: this.parseBoolean(rowData.appliesChangeControl),
-            justification: this.parseString(rowData.justification),
-            sharePointDocumentation: this.parseString(rowData.sharePointDocumentation),
-            estratelRepository: this.parseString(rowData.estratelRepository),
-            areaId: areaId
-        };
-
-        // Procesar relaciones con usuarios
-        if (rowData.mentor) {
-            excelProjectData.mentorId = await this.findOrCreateUser(rowData.mentor, USER_ROLES.COLABORADOR);
+      const stagingProject = await prisma.stagingProject.create({
+        data: {
+          ...mappedData,
+          sourceAreaId,
+          importLogId,
+          rowNumber,
+          batchId: projectBatchId,
+          status: 'PENDING_REVIEW',
+          createdAt: new Date()
+        },
+        include: {
+          sourceArea: true,
+          client: true,
+          projectStage: true
         }
+      });
 
-        if (rowData.coordinator) {
-            excelProjectData.coordinatorId = await this.findOrCreateUser(rowData.coordinator, USER_ROLES.COORDINADOR);
-        }
+      return stagingProject;
 
-        // Procesar relaciones con catálogos
-        if (rowData.risk) {
-            excelProjectData.riskLevelId = await this.findOrCreateCatalog('RISK_LEVEL', rowData.risk);
-        }
-
-        if (rowData.projectType) {
-            excelProjectData.projectTypeId = await this.findOrCreateCatalog('PROJECT_TYPE', rowData.projectType);
-        }
-
-        if (rowData.businessLine) {
-            excelProjectData.businessLineId = await this.findOrCreateCatalog('BUSINESS_LINE', rowData.businessLine);
-        }
-
-        if (rowData.opportunityType) {
-            excelProjectData.opportunityTypeId = await this.findOrCreateCatalog('OPPORTUNITY_TYPE', rowData.opportunityType);
-        }
-
-        if (rowData.segment) {
-            excelProjectData.segmentId = await this.findOrCreateCatalog('SEGMENT', rowData.segment);
-        }
-
-        if (rowData.salesManagement) {
-            excelProjectData.salesManagementId = await this.findOrCreateCatalog('SALES_MANAGEMENT', rowData.salesManagement);
-        }
-
-        if (rowData.salesExecutive) {
-            excelProjectData.salesExecutiveId = await this.findOrCreateCatalog('SALES_EXECUTIVE', rowData.salesExecutive);
-        }
-
-        if (rowData.designer) {
-            excelProjectData.designerId = await this.findOrCreateCatalog('DESIGNER', rowData.designer);
-        }
-
-        // Procesar proveedores
-        let suppliers = [];
-        if (rowData.suppliers) {
-            suppliers = await this.processSuppliersString(rowData.suppliers);
-        }
-
-        return { projectData, excelProjectData, suppliers };
+    } catch (error) {
+      console.error('Error creating staging project:', error);
+      throw error;
     }
+  }
 
-    /**
-     * Guardar proyecto en la base de datos
-     * @param {Object} data - Datos procesados del proyecto 
-     * @param {Object} requestingUser - Usuario que realiza la importación
-     * @returns {Promise<Object>}
-     */
-    async saveProject(data, requestingUser) {
-        const { projectData, excelProjectData, suppliers = [] } = data;
+  /**
+   * Obtiene proyectos en staging por área
+   */
+  async getStagingProjectsByArea(sourceAreaId, status = null) {
+    try {
+      const where = { sourceAreaId };
+      if (status) {
+        where.status = status;
+      }
 
-        // Validar que el usuario solicitante esté definido
-        const effectiveUser = requestingUser || this.requestingUser;
-        if (!effectiveUser || !effectiveUser.userId) {
-            throw new Error('Usuario solicitante no definido para crear proyecto');
+      return await prisma.stagingProject.findMany({
+        where,
+        include: {
+          sourceArea: true,
+          client: true,
+          projectStage: true,
+          transferredToProject: true,
+          architect: true,
+          designManager: true,
+          designCoordinator: true,
+          salesManager: true,
+          salesLeader: true,
+          salesExecutive: true,
+          transferredByUser: true,
+          serviceType: true,
+          contractType: true,
+          businessLine: true
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
+    } catch (error) {
+      console.error('Error getting staging projects:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza estado de proyecto staging
+   */
+  async updateStagingProjectStatus(stagingProjectId, status, notes = null) {
+    try {
+      return await prisma.stagingProject.update({
+        where: { id: stagingProjectId },
+        data: {
+          status,
+          reviewNotes: notes,
+          reviewedAt: new Date()
+        },
+        include: {
+          sourceArea: true,
+          client: true,
+          projectStage: true
         }
+      });
 
-        // Verificar que el usuario existe en la base de datos
-        let userExists = await prisma.user.findUnique({
-            where: { id: effectiveUser.userId },
-            select: { id: true, email: true, firstName: true, lastName: true }
-        });
+    } catch (error) {
+      console.error('Error updating staging project status:', error);
+      throw error;
+    }
+  }
 
-        if (!userExists) {
-            // Por seguridad, si el userId del token no existe, invalidar la sesión
-            logger.error(`Token de seguridad inválido: Usuario con ID ${effectiveUser.userId} no existe. Email del token: ${effectiveUser.email}`);
+  /**
+   * Elimina proyecto staging
+   */
+  async deleteStagingProject(stagingProjectId) {
+    try {
+      return await prisma.stagingProject.delete({
+        where: { id: stagingProjectId }
+      });
 
-            const error = new Error('Token de autenticación inválido. Por favor, inicie sesión nuevamente.');
-            error.statusCode = 401; // Unauthorized
-            error.code = 'INVALID_TOKEN';
-            throw error;
+    } catch (error) {
+      console.error('Error deleting staging project:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene logs de importación
+   */
+  async getImportLogs(sourceAreaId = null) {
+    try {
+      const where = sourceAreaId ? { sourceAreaId } : {};
+
+      return await prisma.importLog.findMany({
+        where,
+        include: {
+          sourceArea: true
+        },
+        orderBy: { startedAt: 'desc' }
+      });
+
+    } catch (error) {
+      console.error('Error getting import logs:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Valida estructura de Excel
+   */
+  async validateExcelStructure(filePath, sourceAreaId) {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(filePath);
+      const worksheet = workbook.getWorksheet(1);
+
+      if (!worksheet) {
+        throw new Error('El archivo Excel debe tener al menos una hoja');
+      }
+
+      // Obtener headers
+      const headerRow = worksheet.getRow(1);
+      const headers = [];
+      headerRow.eachCell((cell, colNumber) => {
+        if (cell.value) {
+          headers.push(cell.value.toString().trim());
         }
+      });
 
-        logger.debug(`Usuario validado para crear proyecto: ${userExists.email} (${userExists.firstName} ${userExists.lastName})`);
+      // Obtener mapeos esperados para el área
+      const expectedMappings = await fieldMappingService.getFieldMappings(sourceAreaId);
+      const expectedHeaders = expectedMappings.map(m => m.sourceField);
+      const requiredHeaders = expectedMappings
+        .filter(m => m.isRequired)
+        .map(m => m.sourceField);
 
-        // Crear o actualizar proyecto principal
-        let project;
-        let excelProject;
-        let existingProject = null;
-        let isNewProject = true;
+      // Validar headers requeridos
+      const missingRequired = requiredHeaders.filter(h => !headers.includes(h));
+      const extraHeaders = headers.filter(h => !expectedHeaders.includes(h));
 
-        if (excelProjectData.excelId) {
-            // Buscar proyecto existente por excelId
-            existingProject = await prisma.project.findFirst({
-                where: {
-                    excelDetails: {
-                        excelId: excelProjectData.excelId
-                    }
-                },
-                include: { excelDetails: true }
-            });
+      return {
+        isValid: missingRequired.length === 0,
+        headers,
+        expectedHeaders,
+        missingRequired,
+        extraHeaders,
+        rowCount: worksheet.rowCount - 1
+      };
 
-            if (existingProject) {
-                isNewProject = false;
-                // Actualizar proyecto existente
-                project = await prisma.project.update({
-                    where: { id: existingProject.id },
-                    data: projectData
-                });
+    } catch (error) {
+      console.error('Error validating Excel structure:', error);
+      throw error;
+    }
+  }
 
-                // Actualizar detalles Excel
-                excelProject = await prisma.excelProject.update({
-                    where: { projectId: existingProject.id },
-                    data: { ...excelProjectData, projectId: existingProject.id }
-                });
+  /**
+   * Previsualiza datos del Excel con mapeo de campos aplicado
+   */
+  async previewExcelData(filePath, sourceAreaId, maxRows = 10) {
+    try {
+      // Leer archivo Excel
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(filePath);
+      const worksheet = workbook.getWorksheet(1);
+
+      // Obtener headers del Excel
+      const headerRow = worksheet.getRow(1);
+      const excelHeaders = [];
+      headerRow.eachCell((cell, colNumber) => {
+        excelHeaders[colNumber] = cell.value?.toString().trim();
+      });
+
+      // Obtener field mappings para el área
+      const fieldMappings = await fieldMappingService.getFieldMappings(sourceAreaId);
+
+      // Crear mapa de headers Excel a campos target
+      const headerMapping = {};
+      let mappedFields = 0;
+
+      fieldMappings.forEach(mapping => {
+        const excelIndex = excelHeaders.findIndex(h => h === mapping.sourceField);
+        if (excelIndex !== -1) {
+          headerMapping[excelIndex] = {
+            sourceField: mapping.sourceField,
+            targetField: mapping.targetField,
+            transformation: mapping.transformation,
+            description: mapping.description
+          };
+          mappedFields++;
+        }
+      });
+
+      // Leer datos de previsualización
+      const previewRows = [];
+      const totalRows = worksheet.rowCount - 1; // Excluir header
+      const rowsToRead = Math.min(maxRows, totalRows);
+
+      for (let rowNumber = 2; rowNumber <= rowsToRead + 1; rowNumber++) {
+        const row = worksheet.getRow(rowNumber);
+        const mappedRow = {};
+
+        // Mapear cada celda según los field mappings
+        Object.keys(headerMapping).forEach(colIndex => {
+          const cell = row.getCell(parseInt(colIndex));
+          const mapping = headerMapping[colIndex];
+          let value = null;
+
+          if (cell.value !== null && cell.value !== undefined) {
+            value = cell.value;
+
+            // Para preview, mantener valores originales sin transformar completamente
+            if (mapping.transformation) {
+              switch (mapping.transformation) {
+                case 'DATE_FORMAT':
+                  if (cell.value instanceof Date) {
+                    value = cell.value.toISOString().split('T')[0];
+                  } else {
+                    value = value.toString();
+                  }
+                  break;
+                case 'TO_DECIMAL':
+                case 'CURRENCY_TO_NUMBER':
+                  // Para preview, mantener como string pero mostrar que es numérico
+                  value = `${value} (numérico)`;
+                  break;
+                case 'TO_INTEGER':
+                  // Para preview, mantener como string pero mostrar que es entero
+                  value = `${value} (entero)`;
+                  break;
+                case 'TO_STRING':
+                  value = value.toString();
+                  break;
+                case 'UPPERCASE':
+                  value = value.toString().toUpperCase();
+                  break;
+                case 'SPLIT_SEMICOLON':
+                  // Para preview, mostrar como array sin procesar completamente
+                  const splitValues = value.toString().split(';').map(s => s.trim());
+                  value = `[${splitValues.join(', ')}]`;
+                  break;
+                case 'USER_LOOKUP':
+                  value = `${value} (lookup usuario)`;
+                  break;
+                case 'CLIENT_LOOKUP':
+                case 'CLIENT_NAME_LOOKUP':
+                  value = `${value} (lookup cliente)`;
+                  break;
+                case 'PROJECT_STAGE_LOOKUP':
+                  value = `${value} (lookup etapa)`;
+                  break;
+                case 'CATALOG_LOOKUP':
+                case 'CATALOG_LOOKUP_SERVICE_TYPE':
+                case 'CATALOG_LOOKUP_CONTRACT_TYPE':
+                case 'CATALOG_LOOKUP_BUSINESS_LINE':
+                  value = `${value} (lookup catálogo)`;
+                  break;
+                default:
+                  value = value.toString();
+              }
             } else {
-                // Crear nuevo proyecto
-                project = await prisma.project.create({
-                    data: {
-                        ...projectData,
-                        createdBy: effectiveUser.userId
-                    }
-                });
-
-                // Crear detalles Excel
-                excelProject = await prisma.excelProject.create({
-                    data: { ...excelProjectData, projectId: project.id }
-                });
+              value = value.toString();
             }
-        } else {
-            // Crear nuevo proyecto sin excelId
-            project = await prisma.project.create({
-                data: {
-                    ...projectData,
-                    createdBy: effectiveUser.userId
-                }
-            });
+          }
 
-            excelProject = await prisma.excelProject.create({
-                data: { ...excelProjectData, projectId: project.id }
-            });
-        }
-
-        // Procesar proveedores
-        if (suppliers.length > 0) {
-            // Eliminar relaciones existentes
-            await prisma.excelProjectSupplier.deleteMany({
-                where: { excelProjectId: excelProject.id }
-            });
-
-            // Crear nuevas relaciones
-            for (const supplier of suppliers) {
-                await prisma.excelProjectSupplier.create({
-                    data: {
-                        excelProjectId: excelProject.id,
-                        supplierId: supplier.id,
-                        role: supplier.role
-                    }
-                });
-            }
-        }
-
-        // Crear tareas estándar para proyectos nuevos (no actualizaciones)
-        if (isNewProject) {
-            logger.info(`Creando tareas estándar para proyecto nuevo: ${project.id} (${project.name})`);
-            await this.createStandardProjectTasks(project.id, effectiveUser.userId);
-        } else {
-            logger.info(`Omitiendo tareas estándar para proyecto existente: ${project.id} (${project.name})`);
-        }
-
-        // Crear asignaciones de proyecto para coordinador y mentor (project-level assignments)
-        await this.createProjectAssignments(project.id, excelProject, effectiveUser.userId);
-
-        // Crear o obtener proyecto general del área y asignar usuarios
-        await this.handleGeneralProjectAssignments(project.areaId, excelProject, effectiveUser.userId);
-
-        return { project, excelProject };
-    }
-
-    /**
-     * Crear asignaciones de proyecto para coordinador y mentor
-     * Ahora los usuarios se asignan al proyecto directamente, no a tareas individuales
-     * @param {string} projectId - ID del proyecto
-     * @param {Object} excelProject - Datos del proyecto Excel
-     * @param {string} assignedByUserId - ID del usuario que asigna
-     * @returns {Promise<Array>}
-     */
-    async createProjectAssignments(projectId, excelProject, assignedByUserId) {
-        const assignments = [];
-
-        try {
-            // Eliminar asignaciones existentes para el proyecto
-            await prisma.projectAssignment.updateMany({
-                where: {
-                    projectId: projectId,
-                    isActive: true
-                },
-                data: { isActive: false }
-            });
-
-            // Asignar coordinador si existe
-            if (excelProject.coordinatorId) {
-                const coordinatorAssignment = await prisma.projectAssignment.create({
-                    data: {
-                        projectId: projectId,
-                        userId: excelProject.coordinatorId,
-                        assignedById: assignedByUserId,
-                        isActive: true
-                    }
-                });
-                assignments.push(coordinatorAssignment);
-                logger.info(`Coordinador asignado al proyecto ${projectId}: ${excelProject.coordinatorId}`);
-            }
-
-            // Asignar mentor si existe
-            if (excelProject.mentorId) {
-                const mentorAssignment = await prisma.projectAssignment.create({
-                    data: {
-                        projectId: projectId,
-                        userId: excelProject.mentorId,
-                        assignedById: assignedByUserId,
-                        isActive: true
-                    }
-                });
-                assignments.push(mentorAssignment);
-                logger.info(`Mentor asignado al proyecto ${projectId}: ${excelProject.mentorId}`);
-            }
-
-            return assignments;
-        } catch (error) {
-            logger.error(`Error creando asignaciones para proyecto ${projectId}:`, error);
-            // No lanzar error para no interrumpir la importación del proyecto
-            return [];
-        }
-    }
-
-    /**
-     * Buscar usuario (ya debe estar pre-creado)
-     * @param {string} userString - String con nombre y ID del usuario del Excel
-     * @param {string} defaultRole - Rol por defecto del usuario
-     * @returns {Promise<string>} - ID del usuario
-     */
-    async findOrCreateUser(userString, defaultRole) {
-        if (!userString) return null;
-
-        // Usar cache para búsquedas (todos los usuarios ya están pre-creados)
-        const cacheKey = `${userString}-${defaultRole}`;
-        if (this.userCache && this.userCache.has(cacheKey)) {
-            return this.userCache.get(cacheKey);
-        }
-
-        // Extraer nombre para cache alternativo
-        const match = userString.match(/^(.+);#(\d+)$/);
-        const name = match ? match[1].trim() : userString.trim();
-        const nameCacheKey = `${name}-${defaultRole}`;
-
-        if (this.userCache && this.userCache.has(nameCacheKey)) {
-            return this.userCache.get(nameCacheKey);
-        }
-
-        // Si llegamos aquí, significa que no se pre-creó el usuario (error de lógica)
-        logger.error(`CRÍTICO: Usuario no encontrado en cache después de pre-creación: ${userString} (${defaultRole})`);
-        logger.error(`Cache keys disponibles: ${Array.from(this.userCache.keys()).slice(0, 10).join(', ')}...`);
-
-        // Como fallback, intentar encontrar en BD
-        const nameParts = name.split(' ');
-        const firstName = nameParts[0];
-        const lastName = nameParts.slice(1).join(' ') || firstName;
-
-        const user = await prisma.user.findFirst({
-            where: {
-                AND: [
-                    { firstName: { equals: firstName, mode: 'insensitive' } },
-                    { lastName: { equals: lastName, mode: 'insensitive' } }
-                ]
-            }
+          mappedRow[mapping.targetField] = value;
         });
 
-        if (user) {
-            logger.warn(`Usuario encontrado en BD como fallback: ${user.id} - ${user.email}`);
-            // Guardar en cache para próximas búsquedas
-            this.userCache.set(cacheKey, user.id);
-            this.userCache.set(nameCacheKey, user.id);
-            return user.id;
+        // Solo agregar la fila si tiene al menos un campo con valor
+        if (Object.values(mappedRow).some(v => v !== null && v !== undefined && v !== '')) {
+          previewRows.push(mappedRow);
         }
+      }
 
-        // NO CREAR USUARIO AQUÍ - Solo reportar error
-        logger.error(`FALLO DEFINITIVO: No se puede encontrar usuario: ${userString} (${defaultRole})`);
-        return null; // Retornar null en lugar de hacer throw para evitar fallar todo el procesamiento
+      // Análisis de mapeo
+      const recognizedFields = Object.values(headerMapping).map(m => m.sourceField);
+      const unmappedHeaders = excelHeaders.filter(h => h && !recognizedFields.includes(h));
+
+      return {
+        previewRows,
+        totalRows,
+        mappedFields,
+        mappingResults: {
+          recognized: recognizedFields.length,
+          unmapped: unmappedHeaders.length,
+          unmappedHeaders
+        },
+        fieldMappings: Object.values(headerMapping)
+      };
+
+    } catch (error) {
+      console.error('Error previewing Excel data:', error);
+      throw error;
     }
-
-    /**
-     * Pre-cargar usuarios existentes en cache para optimizar búsquedas
-     * @param {Array} data - Datos del Excel
-     */
-    async preloadExistingUsers(data) {
-        try {
-            // Extraer todos los nombres de usuarios únicos del Excel
-            const userNames = new Set();
-
-            data.forEach(row => {
-                if (row.mentor) userNames.add(row.mentor);
-                if (row.coordinator) userNames.add(row.coordinator);
-            });
-
-            logger.info(`Pre-cargando ${userNames.size} usuarios únicos...`);
-
-            // Obtener todos los usuarios existentes de una vez
-            const existingUsers = await prisma.user.findMany({
-                select: {
-                    id: true,
-                    firstName: true,
-                    lastName: true,
-                    email: true,
-                    role: true
-                }
-            });
-
-            // Crear índices para búsqueda rápida
-            for (const user of existingUsers) {
-                const fullName = `${user.firstName} ${user.lastName}`;
-                this.userCache.set(`${fullName}-${user.role}`, user.id);
-
-                // También por email base para contadores
-                const emailBase = user.email.split('@')[0];
-                if (emailBase.includes('.')) {
-                    const baseWithoutNumber = emailBase.replace(/\d+$/, '');
-                    const match = emailBase.match(/(\d+)$/);
-                    const number = match ? parseInt(match[1]) : 0;
-
-                    const currentMax = this.emailCounter.get(baseWithoutNumber) || 0;
-                    if (number >= currentMax) {
-                        this.emailCounter.set(baseWithoutNumber, number + 1);
-                    }
-                }
-            }
-
-            logger.info(`Cache de usuarios pre-cargado con ${existingUsers.length} usuarios existentes`);
-        } catch (error) {
-            logger.error('Error pre-cargando usuarios:', error);
-        }
-    }
-
-    /**
-     * Pre-crear todos los usuarios necesarios de forma secuencial
-     * @param {Array} data - Datos del Excel
-     */
-    async preCreateUsers(data) {
-        try {
-            // Extraer todos los usuarios únicos con sus roles del Excel
-            const usersToCreate = new Map(); // userString -> {role, name}
-
-            data.forEach(row => {
-                if (row.mentor) usersToCreate.set(`${row.mentor}-${USER_ROLES.COLABORADOR}`, {
-                    userString: row.mentor,
-                    role: USER_ROLES.COLABORADOR
-                });
-                if (row.coordinator) usersToCreate.set(`${row.coordinator}-${USER_ROLES.COORDINADOR}`, {
-                    userString: row.coordinator,
-                    role: USER_ROLES.COORDINADOR
-                });
-            });
-
-            logger.info(`Pre-creando ${usersToCreate.size} usuarios únicos de forma secuencial...`);
-
-            let created = 0;
-            let existing = 0;
-            let errors = 0;
-
-            // Procesar cada usuario de forma secuencial para evitar condiciones de carrera
-            for (const [key, userInfo] of usersToCreate) {
-                const cacheKey = `${userInfo.userString}-${userInfo.role}`;
-
-                logger.info(`Procesando usuario ${created + existing + errors + 1}/${usersToCreate.size}: ${userInfo.userString} (${userInfo.role})`);
-
-                // Si ya está en cache, skip
-                if (this.userCache.has(cacheKey)) {
-                    existing++;
-                    logger.info(`  → Ya existe en cache`);
-                    continue;
-                }
-
-                try {
-                    const userId = await this.createUserSequentially(userInfo.userString, userInfo.role);
-                    if (userId) {
-                        created++;
-                        logger.info(`  → Creado exitosamente con ID: ${userId}`);
-                    } else {
-                        logger.warn(`  → No se pudo crear, pero no hay error`);
-                    }
-                } catch (error) {
-                    errors++;
-                    logger.error(`  → Error pre-creando usuario ${userInfo.userString}:`, error.message);
-                }
-            }
-
-            logger.info(`Pre-creación completada: ${created} usuarios creados, ${existing} ya existían, ${errors} errores`);
-        } catch (error) {
-            logger.error('Error en pre-creación de usuarios:', error);
-        }
-    }
-
-    /**
-     * Crear usuario de forma secuencial (sin concurrencia)
-     * @param {string} userString 
-     * @param {string} defaultRole 
-     * @returns {Promise<string|null>}
-     */
-    async createUserSequentially(userString, defaultRole) {
-        if (!userString) return null;
-
-        // Extraer nombre e ID del formato "Nombre Apellido;#ID"
-        const match = userString.match(/^(.+);#(\d+)$/);
-        let name;
-
-        if (match) {
-            name = match[1].trim();
-        } else {
-            name = userString.trim();
-        }
-
-        const cacheKey = `${userString}-${defaultRole}`;
-        const nameCacheKey = `${name}-${defaultRole}`;
-
-        // Verificar cache una vez más
-        if (this.userCache.has(cacheKey)) {
-            logger.info(`    Cache hit para ${cacheKey}`);
-            return this.userCache.get(cacheKey);
-        }
-
-        // Buscar usuario existente con lógica mejorada
-        const nameParts = name.split(' ');
-        const firstName = nameParts[0];
-        const lastName = nameParts.slice(1).join(' ') || firstName;
-
-        logger.info(`    Buscando usuario existente: ${firstName} ${lastName}`);
-
-        let user = await this.findExistingUserByName(firstName, lastName);
-
-        if (user) {
-            logger.info(`    Usuario encontrado en BD: ${user.id} - ${user.email}`);
-
-            // Si el usuario existe pero no tiene área asignada, asignarle el área del proyecto
-            if (!user.areaId && this.projectAreaId) {
-                try {
-                    await prisma.user.update({
-                        where: { id: user.id },
-                        data: { areaId: this.projectAreaId }
-                    });
-                    logger.info(`    Área asignada al usuario existente: ${user.email} -> Área: ${this.projectAreaId}`);
-                    user.areaId = this.projectAreaId; // Actualizar objeto local
-                } catch (error) {
-                    logger.warn(`    No se pudo asignar área a usuario ${user.id}: ${error.message}`);
-                }
-            }
-
-            // Asignar usuario al proyecto general de su área (si tiene área)
-            if (user.areaId || this.projectAreaId) {
-                await this.assignUserToAreaGeneralProject(user.id, user.areaId || this.projectAreaId);
-            }
-
-            // Verificar si necesita actualizar email (si está usando email genérico importado)
-            if (user.email.includes('@imported.com')) {
-                // Generar email más específico usando el proyecto actual
-                let baseEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
-                let newEmail = `${baseEmail}@${process.env.DEFAULT_EMAIL_DOMAIN || 'teamtime.com'}`;
-
-                // Verificar que el nuevo email no exista
-                const emailExists = await prisma.user.findUnique({ where: { email: newEmail } });
-                if (!emailExists && newEmail !== user.email) {
-                    try {
-                        await prisma.user.update({
-                            where: { id: user.id },
-                            data: { email: newEmail }
-                        });
-                        logger.info(`    Email actualizado: ${user.email} -> ${newEmail}`);
-                        user.email = newEmail; // Actualizar objeto local
-                    } catch (error) {
-                        logger.warn(`    No se pudo actualizar email para ${user.id}: ${error.message}`);
-                    }
-                }
-            }
-        } else {
-            logger.info(`    Usuario no existe, se creará nuevo`);
-        }
-
-        if (!user) {
-            // Generar email único
-            let baseEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
-            let counter = this.emailCounter.get(baseEmail) || 0;
-            const emailDomain = process.env.DEFAULT_EMAIL_DOMAIN || 'teamtime.com';
-            let email = counter === 0 ? `${baseEmail}@${emailDomain}` : `${baseEmail}${counter}@${emailDomain}`;
-
-            logger.info(`    Generando email base: ${baseEmail}, contador inicial: ${counter}, email: ${email}`);
-
-            // Verificar email único en BD
-            let emailExists = await prisma.user.findUnique({ where: { email } });
-            while (emailExists) {
-                logger.info(`    Email ${email} ya existe (${emailExists.id}), incrementando contador`);
-                counter++;
-                email = `${baseEmail}${counter}@${emailDomain}`;
-                emailExists = await prisma.user.findUnique({ where: { email } });
-            }
-
-            logger.info(`    Email final único: ${email} (contador: ${counter})`);
-            this.emailCounter.set(baseEmail, counter + 1);
-
-            try {
-                const tempPassword = process.env.DEFAULT_TEMP_PASSWORD || 'temp_password123';
-                const hashedPassword = await bcrypt.hash(tempPassword, 10);
-                user = await prisma.user.create({
-                    data: {
-                        email,
-                        password: hashedPassword,
-                        firstName,
-                        lastName,
-                        role: defaultRole,
-                        areaId: this.projectAreaId, // Asignar al área del proyecto
-                        isActive: true
-                    }
-                });
-
-                logger.info(`Usuario creado secuencialmente: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email} - Área: ${this.projectAreaId}`);
-
-                // Asignar automáticamente al proyecto general de su área
-                await this.assignUserToAreaGeneralProject(user.id, this.projectAreaId);
-
-            } catch (error) {
-                // Si aún hay error de duplicado, usar timestamp
-                if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
-                    const timestamp = Date.now();
-                    const emailDomain = process.env.DEFAULT_EMAIL_DOMAIN || 'teamtime.com';
-                    const timestampEmail = `${baseEmail}.${timestamp}@${emailDomain}`;
-
-                    const tempPassword = process.env.DEFAULT_TEMP_PASSWORD || 'temp_password123';
-                    const hashedPassword = await bcrypt.hash(tempPassword, 10);
-                    user = await prisma.user.create({
-                        data: {
-                            email: timestampEmail,
-                            password: hashedPassword,
-                            firstName,
-                            lastName,
-                            role: defaultRole,
-                            areaId: this.projectAreaId, // Asignar al área del proyecto
-                            isActive: true
-                        }
-                    });
-
-                    logger.info(`Usuario creado con timestamp: ${user.firstName} ${user.lastName} (${user.role}) - ${user.email} - Área: ${this.projectAreaId}`);
-
-                    // Asignar automáticamente al proyecto general de su área
-                    await this.assignUserToAreaGeneralProject(user.id, this.projectAreaId);
-
-                } else {
-                    throw error;
-                }
-            }
-        }
-
-        // Guardar en cache
-        this.userCache.set(cacheKey, user.id);
-        this.userCache.set(nameCacheKey, user.id);
-
-        return user.id;
-    }
-
-    /**
-     * Pre-crear catálogos necesarios
-     * @param {Array} data - Datos del Excel
-     */
-    async preCreateCatalogs(data) {
-        try {
-            // Extraer todos los valores únicos de cada tipo de catálogo
-            const catalogValues = {
-                'RISK_LEVEL': new Set(),
-                'PROJECT_TYPE': new Set(),
-                'BUSINESS_LINE': new Set(),
-                'OPPORTUNITY_TYPE': new Set(),
-                'SEGMENT': new Set(),
-                'SALES_MANAGEMENT': new Set(),
-                'SALES_EXECUTIVE': new Set(),
-                'DESIGNER': new Set()
-            };
-
-            data.forEach(row => {
-                if (row.risk) catalogValues['RISK_LEVEL'].add(row.risk);
-                if (row.projectType) catalogValues['PROJECT_TYPE'].add(row.projectType);
-                if (row.businessLine) catalogValues['BUSINESS_LINE'].add(row.businessLine);
-                if (row.opportunityType) catalogValues['OPPORTUNITY_TYPE'].add(row.opportunityType);
-                if (row.segment) catalogValues['SEGMENT'].add(row.segment);
-                if (row.salesManagement) catalogValues['SALES_MANAGEMENT'].add(row.salesManagement);
-                if (row.salesExecutive) catalogValues['SALES_EXECUTIVE'].add(row.salesExecutive);
-                if (row.designer) catalogValues['DESIGNER'].add(row.designer);
-            });
-
-            logger.info('Pre-creando catálogos necesarios...');
-
-            // Crear catálogos de forma secuencial
-            for (const [type, values] of Object.entries(catalogValues)) {
-                for (const value of values) {
-                    await this.findOrCreateCatalog(type, value);
-                }
-            }
-
-            logger.info('Catálogos pre-creados exitosamente');
-        } catch (error) {
-            logger.error('Error pre-creando catálogos:', error);
-        }
-    }
-
-    /**
-     * Buscar o crear entrada de catálogo
-     * @param {string} type - Tipo de catálogo
-     * @param {string} name - Nombre del valor
-     * @returns {Promise<string>} - ID del catálogo
-     */
-    async findOrCreateCatalog(type, name) {
-        if (!name) return null;
-
-        // Limpiar y extraer nombre para catálogos que pueden tener formato "Nombre;#ID"
-        let cleanName = name;
-        let externalId = null;
-
-        const match = String(name).match(/^(.+);#(\d+)$/);
-        if (match) {
-            cleanName = match[1].trim();
-            externalId = match[2];
-        } else {
-            cleanName = String(name).trim();
-        }
-
-        let catalog = await prisma.catalog.findFirst({
-            where: {
-                type: type,
-                name: { equals: cleanName, mode: 'insensitive' }
-            }
-        });
-
-        if (!catalog) {
-            catalog = await prisma.catalog.create({
-                data: {
-                    type: type,
-                    name: cleanName,
-                    externalId: externalId
-                }
-            });
-        }
-
-        return catalog.id;
-    }
-
-    /**
-     * Procesar string de proveedores
-     * @param {string} suppliersString 
-     * @returns {Promise<Array>}
-     */
-    async processSuppliersString(suppliersString) {
-        if (!suppliersString) return [];
-
-        const supplierNames = suppliersString.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 0);
-        const suppliers = [];
-
-        for (const supplierName of supplierNames) {
-            let supplier = await prisma.supplier.findFirst({
-                where: { name: { equals: supplierName, mode: 'insensitive' } }
-            });
-
-            if (!supplier) {
-                supplier = await prisma.supplier.create({
-                    data: { name: supplierName }
-                });
-            }
-
-            suppliers.push({ id: supplier.id, role: null });
-        }
-
-        return suppliers;
-    }
-
-    // Métodos de parsing y validación
-    parseString(value) {
-        if (value === null || value === undefined) return null;
-        return String(value).trim() || null;
-    }
-
-    parseInteger(value) {
-        if (value === null || value === undefined) return null;
-        const parsed = parseInt(value);
-        return isNaN(parsed) ? null : parsed;
-    }
-
-    parseDecimal(value, maxValue = null) {
-        if (value === null || value === undefined) return null;
-        const parsed = parseFloat(value);
-        if (isNaN(parsed)) return null;
-
-        // Validar rango si se especifica
-        if (maxValue !== null && Math.abs(parsed) > maxValue) {
-            logger.warn(`Valor decimal ${parsed} excede el máximo permitido ${maxValue}, será truncado`);
-            return parsed > 0 ? maxValue : -maxValue;
-        }
-
-        return parsed;
-    }
-
-    parseDate(value) {
-        if (!value) return null;
-        if (value instanceof Date) return value;
-
-        try {
-            const date = new Date(value);
-            return isNaN(date.getTime()) ? null : date;
-        } catch {
-            return null;
-        }
-    }
-
-    /**
-     * Mapear estatus del Excel a ProjectStatus
-     * @param {string} value 
-     * @returns {string}
-     */
-    mapStatus(value) {
-        if (!value) return 'ACTIVE';
-        const statusStr = String(value).trim();
-        return this.statusMapping[statusStr] || 'ACTIVE';
-    }
-
-    parseBoolean(value) {
-        if (value === null || value === undefined) return false;
-        if (typeof value === 'boolean') return value;
-
-        const str = String(value).toLowerCase().trim();
-        return ['si', 'sí', 'yes', 'true', '1'].includes(str);
-    }
-
-    parseArray(value) {
-        if (!value) return [];
-        if (Array.isArray(value)) return value;
-
-        return String(value).split(/[;,]/).map(s => s.trim()).filter(s => s.length > 0);
-    }
-
-    /**
-     * Crear tareas estándar para proyecto importado
-     * @param {string} projectId - ID del proyecto
-     * @param {string} createdByUserId - ID del usuario que crea las tareas (opcional)
-     * @returns {Promise<Array>}
-     */
-    async createStandardProjectTasks(projectId, createdByUserId = null) {
-        try {
-            logger.info(`Iniciando creación de tareas estándar para proyecto: ${projectId}`);
-
-            // Obtener información del usuario para pasar al ProjectService
-            const userInfo = await prisma.user.findUnique({
-                where: { id: createdByUserId },
-                select: { id: true, email: true, role: true, areaId: true }
-            });
-
-            if (!userInfo) {
-                logger.error(`Usuario ${createdByUserId} no encontrado para crear tareas estándar`);
-                return [];
-            }
-
-            // Crear objeto usuario completo para el ProjectService
-            const requestingUser = {
-                userId: userInfo.id,
-                email: userInfo.email,
-                role: userInfo.role,
-                areaId: userInfo.areaId
-            };
-
-            // Verificar si el proyecto ya tiene tareas estándar
-            const standardTasksInfo = await this.projectService.hasStandardTasks(projectId, requestingUser);
-            logger.info(`¿Proyecto ${projectId} ya tiene tareas estándar? ${standardTasksInfo.hasStandardTasks} (${standardTasksInfo.existingStandardTasks.length}/5)`);
-
-            if (standardTasksInfo.hasStandardTasks) {
-                logger.info(`Proyecto ${projectId} ya tiene tareas estándar, omitiendo creación`);
-                return [];
-            }
-
-            // Crear las tareas estándar usando el servicio de proyecto
-            logger.info(`Creando tareas estándar para proyecto ${projectId} con usuario ${createdByUserId}`);
-            const standardTasks = await this.projectService.createStandardTasks(projectId, requestingUser);
-
-            logger.info(`${standardTasks.length} tareas estándar creadas para proyecto ${projectId}`);
-            return standardTasks;
-
-        } catch (error) {
-            logger.error(`Error creando tareas estándar para proyecto ${projectId}:`, error);
-            // No lanzar error para no interrumpir la importación del proyecto
-            return [];
-        }
-    }
-
-    /**
-     * Manejar asignaciones al proyecto general del área
-     * @param {string} areaId - ID del área
-     * @param {Object} excelProject - Datos del proyecto Excel
-     * @param {string} requestingUserId - ID del usuario que realiza la importación
-     * @returns {Promise<void>}
-     */
-    async handleGeneralProjectAssignments(areaId, excelProject, requestingUserId) {
-        try {
-            // Obtener información del área
-            const area = await prisma.area.findUnique({
-                where: { id: areaId },
-                select: { id: true, name: true }
-            });
-
-            if (!area) {
-                logger.error(`Área con ID ${areaId} no encontrada`);
-                return;
-            }
-
-            // Obtener información completa del usuario solicitante
-            const requestingUserInfo = await prisma.user.findUnique({
-                where: { id: requestingUserId },
-                select: { id: true, email: true, role: true, areaId: true }
-            });
-
-            if (!requestingUserInfo) {
-                logger.error(`Usuario solicitante ${requestingUserId} no encontrado`);
-                return;
-            }
-
-            // Crear objeto usuario para el ProjectService
-            const requestingUser = {
-                userId: requestingUserInfo.id,
-                email: requestingUserInfo.email,
-                role: requestingUserInfo.role,
-                areaId: requestingUserInfo.areaId
-            };
-
-            // Crear o obtener el proyecto general del área
-            const generalProject = await this.projectService.createOrGetGeneralProject(
-                areaId,
-                area.name,
-                null, // projectName - usar default
-                null, // tasks - usar default
-                requestingUser
-            );
-
-            // Recopilar usuarios a asignar al proyecto general
-            const usersToAssign = [];
-
-            if (excelProject.coordinatorId) {
-                usersToAssign.push(excelProject.coordinatorId);
-            }
-
-            if (excelProject.mentorId) {
-                usersToAssign.push(excelProject.mentorId);
-            }
-
-            // Asignar usuarios al proyecto general (evitar duplicados)
-            const uniqueUsers = [...new Set(usersToAssign)];
-
-            for (const userId of uniqueUsers) {
-                try {
-                    await this.projectService.assignUserToProject(generalProject.id, userId, requestingUserId);
-                    logger.info(`Usuario ${userId} asignado al proyecto general del área ${areaId}`);
-                } catch (error) {
-                    logger.warn(`No se pudo asignar usuario ${userId} al proyecto general: ${error.message}`);
-                }
-            }
-
-        } catch (error) {
-            logger.error(`Error manejando asignaciones del proyecto general para área ${areaId}:`, error);
-            // No lanzar error para no interrumpir la importación
-        }
-    }
-
-    /**
-     * Crear múltiples tareas predeterminadas para un proyecto
-     * @param {string} projectId - ID del proyecto
-     * @param {string} createdByUserId - ID del usuario que crea las tareas (opcional)
-     * @param {Array} taskTemplates - Array de plantillas de tareas
-     * @returns {Promise<Array>}
-     */
-    async createProjectTasks(projectId, createdByUserId = null, taskTemplates = []) {
-        const defaultTemplates = [
-            {
-                title: 'Actividades del proyecto',
-                description: 'Tarea general para actividades del proyecto',
-                priority: 'MEDIUM',
-                tags: ['general']
-            },
-            {
-                title: 'Revisión de requerimientos',
-                description: 'Validar y documentar requerimientos del proyecto',
-                priority: 'HIGH',
-                tags: ['análisis', 'requerimientos']
-            },
-            {
-                title: 'Seguimiento de avances',
-                description: 'Monitoreo periódico del progreso del proyecto',
-                priority: 'MEDIUM',
-                tags: ['seguimiento', 'monitoreo']
-            }
-        ];
-
-        const templates = taskTemplates.length > 0 ? taskTemplates : [defaultTemplates[0]]; // Solo la primera por defecto
-        const createdTasks = [];
-
-        for (const template of templates) {
-            try {
-                const task = await prisma.task.create({
-                    data: {
-                        title: template.title,
-                        description: template.description || null,
-                        projectId: projectId,
-                        status: template.status || 'TODO',
-                        priority: template.priority || 'MEDIUM',
-                        createdBy: createdByUserId,
-                        tags: template.tags || ['importado'],
-                        estimatedHours: template.estimatedHours || null,
-                        dueDate: template.dueDate || null
-                    }
-                });
-
-                createdTasks.push(task);
-                logger.info(`Tarea creada: ${task.title} para proyecto ${projectId}`);
-            } catch (error) {
-                logger.error(`Error creando tarea "${template.title}" para proyecto ${projectId}:`, error);
-            }
-        }
-
-        return createdTasks;
-    }
-
-    /**
-     * Buscar usuario existente por nombre con lógica mejorada para evitar duplicados
-     * @param {string} firstName 
-     * @param {string} lastName 
-     * @returns {Promise<Object|null>}
-     */
-    async findExistingUserByName(firstName, lastName) {
-        // Estrategia 1: Búsqueda exacta (case insensitive)
-        let user = await prisma.user.findFirst({
-            where: {
-                AND: [
-                    { firstName: { equals: firstName, mode: 'insensitive' } },
-                    { lastName: { equals: lastName, mode: 'insensitive' } }
-                ]
-            }
-        });
-
-        if (user) {
-            logger.info(`    Encontrado con búsqueda exacta: ${user.firstName} ${user.lastName}`);
-            return user;
-        }
-
-        // Estrategia 2: Búsqueda por email generado (para usuarios ya importados)
-        const baseEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}`.replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
-        const emailDomain = process.env.DEFAULT_EMAIL_DOMAIN || 'teamtime.com';
-        const possibleEmails = [
-            `${baseEmail}@${emailDomain}`,
-            `${baseEmail}@imported.com`,
-            `${baseEmail}1@${emailDomain}`,
-            `${baseEmail}2@${emailDomain}`
-        ];
-
-        user = await prisma.user.findFirst({
-            where: {
-                email: { in: possibleEmails }
-            }
-        });
-
-        if (user) {
-            logger.info(`    Encontrado por email generado: ${user.firstName} ${user.lastName} (${user.email})`);
-            return user;
-        }
-
-        // Estrategia 3: Búsqueda parcial para variaciones de nombres
-        const firstNameVariations = [
-            firstName,
-            firstName.split(' ')[0], // Solo el primer nombre si tiene espacios
-        ];
-
-        const lastNameVariations = [
-            lastName,
-            lastName.split(' ').slice(0, 2).join(' '), // Solo los primeros dos apellidos
-        ];
-
-        for (const fName of firstNameVariations) {
-            for (const lName of lastNameVariations) {
-                if (fName && lName) {
-                    user = await prisma.user.findFirst({
-                        where: {
-                            AND: [
-                                { firstName: { contains: fName, mode: 'insensitive' } },
-                                { lastName: { contains: lName, mode: 'insensitive' } }
-                            ]
-                        }
-                    });
-
-                    if (user) {
-                        logger.info(`    Encontrado con búsqueda parcial: ${user.firstName} ${user.lastName} (variación de "${firstName} ${lastName}")`);
-                        return user;
-                    }
-                }
-            }
-        }
-
-        logger.info(`    No se encontró usuario existente para: ${firstName} ${lastName}`);
-        return null;
-    }
-
-    /**
-     * Asignar usuario al proyecto general de su área
-     * @param {string} userId - ID del usuario 
-     * @param {string} areaId - ID del área
-     * @returns {Promise<void>}
-     */
-    async assignUserToAreaGeneralProject(userId, areaId) {
-        try {
-            if (!userId || !areaId) {
-                return;
-            }
-
-            // Obtener información del área
-            const area = await prisma.area.findUnique({
-                where: { id: areaId },
-                select: { id: true, name: true }
-            });
-
-            if (!area) {
-                logger.error(`Área con ID ${areaId} no encontrada`);
-                return;
-            }
-
-            // Crear o obtener el proyecto general del área
-            const generalProject = await this.projectService.createOrGetGeneralProject(
-                areaId,
-                area.name,
-                null, // projectName - usar default
-                null, // tasks - usar default
-                this.requestingUser
-            );
-
-            // Asignar usuario al proyecto general
-            await this.projectService.assignUserToProject(generalProject.id, userId, this.requestingUser.userId);
-
-            logger.info(`Usuario ${userId} asignado automáticamente al proyecto general del área ${areaId}`);
-
-        } catch (error) {
-            logger.warn(`No se pudo asignar usuario ${userId} al proyecto general del área ${areaId}: ${error.message}`);
-        }
-    }
+  }
 }
 
-module.exports = ExcelImportService;
+module.exports = new ExcelImportService();

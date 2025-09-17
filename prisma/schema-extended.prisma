@@ -1,4 +1,4 @@
-// This is your Prisma schema file for the extended project management system - VERSION 2
+// This is your Prisma schema file for the extended project management system
 // Learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -65,7 +65,6 @@ model Area {
   code          String           @unique // DISEÑO, PMO, ATENCION
   description   String?
   color         String           @default("#2563EB")
-  isInitialArea Boolean          @default(false) @map("is_initial_area") // Área donde inician los proyectos
   orderIndex    Int              @default(0) @map("order_index")
   createdBy     String           @map("created_by")
   isActive      Boolean          @default(true) @map("is_active")
@@ -79,44 +78,10 @@ model Area {
   users            User[]
   transfersFrom    AreaTransfer[]   @relation("TransferFromArea")
   transfersTo      AreaTransfer[]   @relation("TransferToArea")
-
-  // Nuevas relaciones para flujo configurable
-  areaFlowFrom     AreaFlow[]       @relation("AreaFlowFrom")
-  areaFlowTo       AreaFlow[]       @relation("AreaFlowTo")
-  fieldMappings    FieldMapping[]
-  statusMappings   StatusMapping[]
   workflowsFrom    WorkflowConfig[] @relation("WorkflowFromArea")
   workflowsTo      WorkflowConfig[] @relation("WorkflowToArea")
-  importLogs       ImportLog[]      @relation("ImportLogArea")
 
   @@map("areas")
-}
-
-// ============================================
-// CONFIGURACIÓN DE FLUJO ENTRE ÁREAS
-// ============================================
-
-model AreaFlow {
-  id              String   @id @default(uuid())
-  fromAreaId      String   @map("from_area_id")
-  toAreaId        String   @map("to_area_id")
-  flowOrder       Int      @map("flow_order") // Orden en el flujo (1, 2, 3...)
-  isRequired      Boolean  @default(true) @map("is_required") // Si es paso obligatorio
-  canSkip         Boolean  @default(false) @map("can_skip") // Permite saltar esta área
-  requiresApproval Boolean @default(true) @map("requires_approval") // Requiere aprobación
-  description     String?
-  conditions      Json?    // Condiciones para permitir el flujo
-  isActive        Boolean  @default(true) @map("is_active")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  // Relaciones
-  fromArea        Area     @relation("AreaFlowFrom", fields: [fromAreaId], references: [id])
-  toArea          Area     @relation("AreaFlowTo", fields: [toAreaId], references: [id])
-
-  @@unique([fromAreaId, toAreaId])
-  @@index([flowOrder])
-  @@map("area_flows")
 }
 
 // ============================================
@@ -205,7 +170,7 @@ model StagingProject {
   id                    String         @id @default(uuid())
   batchId               String         @map("batch_id") // ID del lote de importación
   externalId            String?        @map("external_id") // ID del Excel
-  sourceAreaId          String         @map("source_area_id") // Área de origen (FK)
+  sourceArea            SourceArea     @map("source_area") // DISEÑO o PMO
 
   // Datos originales del Excel (para trazabilidad)
   rawData               Json           @map("raw_data")
@@ -280,7 +245,6 @@ model StagingProject {
   updatedAt             DateTime       @updatedAt @map("updated_at")
 
   // === RELACIONES ===
-  sourceArea            Area           @relation(fields: [sourceAreaId], references: [id])
   client                Client?        @relation(fields: [clientId], references: [id])
   projectStage          ProjectStage?  @relation(fields: [projectStageId], references: [id])
   transferredToProject  Project?       @relation(fields: [transferredToProjectId], references: [id])
@@ -299,8 +263,11 @@ model StagingProject {
   contractType          Catalog?       @relation("ContractTypeCatalog", fields: [contractTypeId], references: [id])
   businessLine          Catalog?       @relation("BusinessLineCatalog", fields: [businessLineId], references: [id])
 
+  // Relación con área
+  area                  Area?          @relation(fields: [sourceArea], references: [code])
+
   @@index([batchId])
-  @@index([sourceAreaId])
+  @@index([sourceArea])
   @@index([status])
   @@index([clientId])
   @@map("staging_projects")
@@ -334,7 +301,7 @@ model ProjectStage {
 
 model FieldMapping {
   id              String      @id @default(uuid())
-  sourceAreaId    String      @map("source_area_id") // FK al área origen
+  sourceArea      SourceArea  @map("source_area")
   sourceField     String      @map("source_field") // Nombre del campo en Excel
   targetField     String      @map("target_field") // Nombre del campo en BD
   targetTable     String      @map("target_table") // staging_projects, projects, etc.
@@ -348,17 +315,14 @@ model FieldMapping {
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
-  // Relación con área
-  sourceArea      Area        @relation(fields: [sourceAreaId], references: [id])
-
-  @@unique([sourceAreaId, sourceField, targetTable])
-  @@index([sourceAreaId, isActive])
+  @@unique([sourceArea, sourceField, targetTable])
+  @@index([sourceArea, isActive])
   @@map("field_mappings")
 }
 
 model StatusMapping {
   id              String        @id @default(uuid())
-  sourceAreaId    String        @map("source_area_id") // FK al área origen
+  sourceArea      SourceArea    @map("source_area")
   sourceStatus    String        @map("source_status") // Estado en Excel
   projectStageId  String        @map("project_stage_id")
   projectStatus   ProjectStatus @map("project_status")
@@ -367,11 +331,9 @@ model StatusMapping {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  // Relaciones
-  sourceArea      Area          @relation(fields: [sourceAreaId], references: [id])
   projectStage    ProjectStage  @relation(fields: [projectStageId], references: [id])
 
-  @@unique([sourceAreaId, sourceStatus])
+  @@unique([sourceArea, sourceStatus])
   @@map("status_mappings")
 }
 
@@ -506,7 +468,7 @@ model ImportLog {
   id              String    @id @default(uuid())
   batchId         String    @map("batch_id")
   fileName        String    @map("file_name")
-  sourceAreaId    String    @map("source_area_id") // FK al área origen
+  sourceArea      SourceArea @map("source_area")
   totalRecords    Int       @map("total_records")
   processedRecords Int      @map("processed_records")
   successRecords  Int       @map("success_records")
@@ -518,12 +480,10 @@ model ImportLog {
   startedAt       DateTime  @map("started_at")
   completedAt     DateTime? @map("completed_at")
 
-  // Relaciones
-  sourceArea      Area      @relation("ImportLogArea", fields: [sourceAreaId], references: [id])
   importer        User      @relation(fields: [importedBy], references: [id])
 
   @@index([batchId])
-  @@index([sourceAreaId])
+  @@index([sourceArea])
   @@map("import_logs")
 }
 
@@ -650,6 +610,11 @@ enum TaskStatus {
   DONE
 }
 
+enum SourceArea {
+  DISENO @map("DISEÑO")
+  PMO
+}
+
 enum StagingStatus {
   PENDING     // Pendiente de validación
   VALIDATED   // Validado, listo para transferir
@@ -659,10 +624,10 @@ enum StagingStatus {
 }
 
 enum TransferType {
-  STANDARD    // Transferencia estándar según flujo configurado
-  SKIP        // Saltar área intermedia
-  RETURN      // Regreso a área anterior
-  CUSTOM      // Transferencia personalizada
+  DESIGN_TO_PMO           // Diseño → PMO
+  PMO_TO_CUSTOMER_SERVICE // PMO → Atención a Clientes
+  RETURN_TO_DESIGN        // Regreso a Diseño para correcciones
+  CUSTOM                  // Transferencia personalizada
 }
 
 enum TransferStatus {

@@ -1,6 +1,6 @@
 const express = require('express');
 
-// Import route modules
+// Import route modules - Existing system
 const authRoutes = require('./auth.routes');
 const userRoutes = require('./user.routes');
 const areaRoutes = require('./area.routes');
@@ -8,11 +8,18 @@ const projectRoutes = require('./project.routes');
 const taskRoutes = require('./task.routes');
 const timeEntryRoutes = require('./timeEntry.routes');
 const timePeriodRoutes = require('./timePeriod.routes');
-const excelProjectMigrationRoutes = require('./excelProjectMigration.routes');
-const excelImportRoutes = require('./excelImport.routes');
 const catalogRoutes = require('./catalog.routes');
 const systemConfigRoutes = require('./systemConfig.routes');
 const dashboardRoutes = require('./dashboard.routes');
+
+// Import route modules - Schema v2 system
+const excelImportRoutes = require('./excelImport.routes');
+const stagingRoutes = require('./staging.routes');
+const transferRoutes = require('./transfer.routes');
+const documentGenerationRoutes = require('./documentGeneration.routes');
+const fieldMappingRoutes = require('./fieldMapping.routes');
+const areaFlowRoutes = require('./areaFlow.routes');
+const userMappingRoutes = require('./userMapping.routes');
 
 const router = express.Router();
 
@@ -60,7 +67,7 @@ router.get('/health', (req, res) => {
     });
 });
 
-// API routes
+// API routes - Core system
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/areas', areaRoutes);
@@ -68,11 +75,18 @@ router.use('/projects', projectRoutes);
 router.use('/tasks', taskRoutes);
 router.use('/time-entries', timeEntryRoutes);
 router.use('/time-periods', timePeriodRoutes);
-router.use('/excel-projects', excelProjectMigrationRoutes);
-router.use('/excel-import', excelImportRoutes);
 router.use('/catalogs', catalogRoutes);
 router.use('/system-config', systemConfigRoutes);
 router.use('/dashboard', dashboardRoutes);
+
+// API routes - Schema v2 enhanced system
+router.use('/excel-import', excelImportRoutes);
+router.use('/staging', stagingRoutes);
+router.use('/transfers', transferRoutes);
+router.use('/documents', documentGenerationRoutes);
+router.use('/field-mappings', fieldMappingRoutes);
+router.use('/area-flows', areaFlowRoutes);
+// router.use('/user-mappings', userMappingRoutes); // Disabled temporarily
 
 // 404 handler for API routes
 router.use('*', (req, res) => {

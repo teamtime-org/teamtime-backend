@@ -2,22 +2,30 @@ const prisma = require('../config/database');
 const { PROJECT_STATUS } = require('../utils/constants');
 
 /**
- * Repositorio para operaciones de proyecto
+ * Repositorio para operaciones de proyecto - Schema v2
  */
 class ProjectRepository {
     /**
      * Buscar proyecto por ID
-     * @param {string} id 
+     * @param {string} id
      * @param {Object} options - Opciones de include
      * @returns {Promise<Object|null>}
      */
     async findById(id, options = {}) {
         const include = {
+            client: {
+                select: {
+                    id: true,
+                    name: true,
+                    acronym: true,
+                },
+            },
             area: {
                 select: {
                     id: true,
                     name: true,
                     color: true,
+                    code: true,
                 },
             },
             creator: {
@@ -27,48 +35,27 @@ class ProjectRepository {
                     lastName: true,
                 },
             },
-            excelDetails: {
+            stagingProjects: {
                 select: {
                     id: true,
-                    totalContractAmountMXN: true,
-                    monthlyBillingMXN: true,
-                    siebelOrderNumber: true,
-                    projectType: {
-                        select: {
-                            id: true,
-                            name: true,
-                        },
-                    },
-                    salesManagement: {
-                        select: {
-                            id: true,
-                            name: true,
-                        },
-                    },
-                    mentor: {
+                    projectName: true,
+                    serviceDescription: true,
+                    generalStatus: true,
+                    monthlyIncomeMXN: true,
+                    tcvMXN: true,
+                    siebelId: true,
+                    architect: {
                         select: {
                             id: true,
                             firstName: true,
                             lastName: true,
                         },
                     },
-                    coordinator: {
+                    salesManager: {
                         select: {
                             id: true,
                             firstName: true,
                             lastName: true,
-                        },
-                    },
-                    salesExecutive: {
-                        select: {
-                            id: true,
-                            name: true,
-                        },
-                    },
-                    designer: {
-                        select: {
-                            id: true,
-                            name: true,
                         },
                     },
                 },
@@ -100,7 +87,6 @@ class ProjectRepository {
                     title: true,
                     status: true,
                     priority: true,
-                    assignedTo: true,
                     estimatedHours: true,
                     dueDate: true,
                 },
@@ -125,18 +111,26 @@ class ProjectRepository {
 
     /**
      * Crear nuevo proyecto
-     * @param {Object} projectData 
+     * @param {Object} projectData
      * @returns {Promise<Object>}
      */
     async create(projectData) {
         return await prisma.project.create({
             data: projectData,
             include: {
+                client: {
+                    select: {
+                        id: true,
+                        name: true,
+                        acronym: true,
+                    },
+                },
                 area: {
                     select: {
                         id: true,
                         name: true,
                         color: true,
+                        code: true,
                     },
                 },
                 creator: {
@@ -152,8 +146,8 @@ class ProjectRepository {
 
     /**
      * Actualizar proyecto
-     * @param {string} id 
-     * @param {Object} updateData 
+     * @param {string} id
+     * @param {Object} updateData
      * @returns {Promise<Object>}
      */
     async update(id, updateData) {
@@ -161,11 +155,19 @@ class ProjectRepository {
             where: { id },
             data: updateData,
             include: {
+                client: {
+                    select: {
+                        id: true,
+                        name: true,
+                        acronym: true,
+                    },
+                },
                 area: {
                     select: {
                         id: true,
                         name: true,
                         color: true,
+                        code: true,
                     },
                 },
                 creator: {
@@ -181,14 +183,14 @@ class ProjectRepository {
 
     /**
      * Listar proyectos con filtros y paginación
-     * @param {Object} filters 
-     * @param {Object} pagination 
+     * @param {Object} filters
+     * @param {Object} pagination
      * @param {string} userRole - Rol del usuario que consulta
      * @param {string} userId - ID del usuario que consulta
      * @returns {Promise<Object>}
      */
     async findMany(filters = {}, pagination = {}, userRole = null, userId = null) {
-        const where = {};
+        const where = { status: 'ACTIVE' }; // Solo proyectos activos por defecto
 
         // Aplicar filtros de acceso por rol
         console.log('ProjectRepository.findMany - filters:', filters);
@@ -199,6 +201,10 @@ class ProjectRepository {
         if (filters.areaId) {
             where.areaId = filters.areaId;
             console.log('ProjectRepository.findMany - Applied areaId filter:', filters.areaId);
+        }
+
+        if (filters.clientId) {
+            where.clientId = filters.clientId;
         }
 
         if (filters.status) {
@@ -260,60 +266,17 @@ class ProjectRepository {
             where.OR = [
                 { name: { contains: filters.search, mode: 'insensitive' } },
                 { description: { contains: filters.search, mode: 'insensitive' } },
-                // Buscar también en detalles de Excel
+                { internalId: { contains: filters.search, mode: 'insensitive' } },
+                // Buscar también en cliente
                 {
-                    excelDetails: {
+                    client: {
                         OR: [
-                            { title: { contains: filters.search, mode: 'insensitive' } },
-                            { serviceDescription: { contains: filters.search, mode: 'insensitive' } },
-                            { siebelOrderNumber: { contains: filters.search, mode: 'insensitive' } },
+                            { name: { contains: filters.search, mode: 'insensitive' } },
+                            { acronym: { contains: filters.search, mode: 'insensitive' } },
                         ]
                     }
                 }
             ];
-        }
-
-        // Filtros específicos de Excel
-        if (filters.mentorId) {
-            where.excelDetails = {
-                ...where.excelDetails,
-                mentorId: filters.mentorId,
-            };
-        }
-
-        if (filters.coordinatorId) {
-            where.excelDetails = {
-                ...where.excelDetails,
-                coordinatorId: filters.coordinatorId,
-            };
-        }
-
-        if (filters.salesExecutiveId) {
-            where.excelDetails = {
-                ...where.excelDetails,
-                salesExecutiveId: filters.salesExecutiveId,
-            };
-        }
-
-        if (filters.salesManagementId) {
-            where.excelDetails = {
-                ...where.excelDetails,
-                salesManagementId: filters.salesManagementId,
-            };
-        }
-
-        if (filters.siebelOrderNumber) {
-            where.excelDetails = {
-                ...where.excelDetails,
-                siebelOrderNumber: { contains: filters.siebelOrderNumber, mode: 'insensitive' },
-            };
-        }
-
-        if (filters.projectType) {
-            where.excelDetails = {
-                ...where.excelDetails,
-                projectType: { contains: filters.projectType, mode: 'insensitive' },
-            };
         }
 
         if (filters.startDate || filters.endDate) {
@@ -336,11 +299,19 @@ class ProjectRepository {
             take: pagination.limit || 10,
             orderBy: { createdAt: 'desc' },
             include: {
+                client: {
+                    select: {
+                        id: true,
+                        name: true,
+                        acronym: true,
+                    },
+                },
                 area: {
                     select: {
                         id: true,
                         name: true,
                         color: true,
+                        code: true,
                     },
                 },
                 creator: {
@@ -362,59 +333,11 @@ class ProjectRepository {
                         },
                     },
                 },
-                excelDetails: {
-                    select: {
-                        id: true,
-                        totalContractAmountMXN: true,
-                        monthlyBillingMXN: true,
-                        siebelOrderNumber: true,
-                        nextSteps: true,
-                        generalStatus: true,
-                        mentor: {
-                            select: {
-                                id: true,
-                                firstName: true,
-                                lastName: true,
-                            },
-                        },
-                        coordinator: {
-                            select: {
-                                id: true,
-                                firstName: true,
-                                lastName: true,
-                            },
-                        },
-                        // Relaciones con catálogos
-                        projectType: {
-                            select: {
-                                id: true,
-                                name: true,
-                            },
-                        },
-                        salesManagement: {
-                            select: {
-                                id: true,
-                                name: true,
-                            },
-                        },
-                        salesExecutive: {
-                            select: {
-                                id: true,
-                                name: true,
-                            },
-                        },
-                        designer: {
-                            select: {
-                                id: true,
-                                name: true,
-                            },
-                        },
-                    },
-                },
                 _count: {
                     select: {
                         tasks: { where: { isActive: true } },
                         timeEntries: true,
+                        stagingProjects: true,
                     },
                 },
             },
@@ -429,9 +352,9 @@ class ProjectRepository {
 
     /**
      * Asignar usuario a proyecto
-     * @param {string} projectId 
-     * @param {string} userId 
-     * @param {string} assignedBy 
+     * @param {string} projectId
+     * @param {string} userId
+     * @param {string} assignedBy
      * @returns {Promise<Object>}
      */
     async assignUser(projectId, userId, assignedBy) {
@@ -452,7 +375,7 @@ class ProjectRepository {
             data: {
                 projectId,
                 userId,
-                assignedBy,
+                assignedById: assignedBy,
             },
             include: {
                 user: {
@@ -476,8 +399,8 @@ class ProjectRepository {
 
     /**
      * Remover asignación de usuario
-     * @param {string} projectId 
-     * @param {string} userId 
+     * @param {string} projectId
+     * @param {string} userId
      * @returns {Promise<Object>}
      */
     async unassignUser(projectId, userId) {
@@ -495,7 +418,7 @@ class ProjectRepository {
 
     /**
      * Obtener usuarios asignados al proyecto
-     * @param {string} projectId 
+     * @param {string} projectId
      * @returns {Promise<Array>}
      */
     async getAssignedUsers(projectId) {
@@ -532,8 +455,8 @@ class ProjectRepository {
 
     /**
      * Verificar si un usuario está asignado al proyecto
-     * @param {string} projectId 
-     * @param {string} userId 
+     * @param {string} projectId
+     * @param {string} userId
      * @returns {Promise<boolean>}
      */
     async isUserAssigned(projectId, userId) {
@@ -550,9 +473,9 @@ class ProjectRepository {
 
     /**
      * Verificar si un usuario puede acceder al proyecto
-     * @param {string} projectId 
-     * @param {string} userId 
-     * @param {string} userRole 
+     * @param {string} projectId
+     * @param {string} userId
+     * @param {string} userRole
      * @returns {Promise<boolean>}
      */
     async canUserAccess(projectId, userId, userRole) {
@@ -588,8 +511,8 @@ class ProjectRepository {
 
     /**
      * Obtener proyectos del usuario
-     * @param {string} userId 
-     * @param {string} userRole 
+     * @param {string} userId
+     * @param {string} userRole
      * @returns {Promise<Array>}
      */
     async findByUser(userId, userRole) {
@@ -614,11 +537,20 @@ class ProjectRepository {
                 description: true,
                 status: true,
                 priority: true,
+                internalId: true,
+                client: {
+                    select: {
+                        id: true,
+                        name: true,
+                        acronym: true,
+                    },
+                },
                 area: {
                     select: {
                         id: true,
                         name: true,
                         color: true,
+                        code: true,
                     },
                 },
             },
@@ -628,7 +560,7 @@ class ProjectRepository {
 
     /**
      * Obtener estadísticas del proyecto
-     * @param {string} id 
+     * @param {string} id
      * @returns {Promise<Object>}
      */
     async getStats(id) {
@@ -681,7 +613,7 @@ class ProjectRepository {
 
     /**
      * Eliminar proyecto (soft delete)
-     * @param {string} id 
+     * @param {string} id
      * @returns {Promise<Object>}
      */
     async softDelete(id) {
@@ -693,7 +625,7 @@ class ProjectRepository {
 
     /**
      * Buscar proyecto general por área
-     * @param {string} areaId 
+     * @param {string} areaId
      * @returns {Promise<Object|null>}
      */
     async findGeneralProjectByArea(areaId) {
@@ -704,10 +636,18 @@ class ProjectRepository {
                 isActive: true,
             },
             include: {
+                client: {
+                    select: {
+                        id: true,
+                        name: true,
+                        acronym: true,
+                    },
+                },
                 area: {
                     select: {
                         id: true,
                         name: true,
+                        code: true,
                     },
                 },
                 tasks: {
@@ -744,8 +684,8 @@ class ProjectRepository {
 
     /**
      * Asignar usuario a proyecto
-     * @param {string} projectId 
-     * @param {string} userId 
+     * @param {string} projectId
+     * @param {string} userId
      * @returns {Promise<Object>}
      */
     async assignUserToProject(projectId, userId) {
@@ -783,6 +723,7 @@ class ProjectRepository {
                     select: {
                         id: true,
                         name: true,
+                        internalId: true,
                     },
                 },
             },
